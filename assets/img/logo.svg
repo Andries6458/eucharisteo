@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 110" role="img" aria-label="Eucharisteo Trading">
+  <defs>
+    <linearGradient id="gold-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e8c088"/>
+      <stop offset="50%" stop-color="#d4a574"/>
+      <stop offset="100%" stop-color="#a6814f"/>
+    </linearGradient>
+    <linearGradient id="gold-soft" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#e8c088"/>
+      <stop offset="100%" stop-color="#c49862"/>
+    </linearGradient>
+  </defs>
+
+  <!-- === GLOBE / MONOGRAM E === -->
+  <g transform="translate(10, 12)">
+    <!-- Golden globe circle -->
+    <circle cx="45" cy="45" r="42" fill="none" stroke="url(#gold-gradient)" stroke-width="1.6"/>
+
+    <!-- Latitude lines -->
+    <ellipse cx="45" cy="45" rx="42" ry="14" fill="none" stroke="url(#gold-gradient)" stroke-width="0.9" opacity="0.85"/>
+    <ellipse cx="45" cy="45" rx="42" ry="28" fill="none" stroke="url(#gold-gradient)" stroke-width="0.9" opacity="0.6"/>
+
+    <!-- Longitude lines -->
+    <ellipse cx="45" cy="45" rx="14" ry="42" fill="none" stroke="url(#gold-gradient)" stroke-width="0.9" opacity="0.85"/>
+    <ellipse cx="45" cy="45" rx="28" ry="42" fill="none" stroke="url(#gold-gradient)" stroke-width="0.9" opacity="0.6"/>
+
+    <!-- Equator (bold) -->
+    <line x1="3" y1="45" x2="87" y2="45" stroke="url(#gold-gradient)" stroke-width="1.2" opacity="0.95"/>
+    <!-- Prime meridian (bold) -->
+    <line x1="45" y1="3" x2="45" y2="87" stroke="url(#gold-gradient)" stroke-width="1.2" opacity="0.95"/>
+
+    <!-- Serif E overlay -->
+    <text x="45" y="70"
+          font-family="Cormorant Garamond, Playfair Display, Georgia, serif"
+          font-size="78"
+          font-weight="500"
+          font-style="italic"
+          fill="url(#gold-soft)"
+          stroke="#0a0e1a"
+          stroke-width="1.2"
+          paint-order="stroke fill"
+          text-anchor="middle"
+          dominant-baseline="alphabetic">E</text>
+  </g>
+
+  <!-- === WORDMARK === -->
+  <g transform="translate(110, 0)">
+    <text x="0" y="58"
+          font-family="Cormorant Garamond, Playfair Display, Georgia, serif"
+          font-size="40"
+          font-weight="500"
+          fill="#f5f1eb"
+          letter-spacing="1.5">Eucharisteo</text>
+    <text x="2" y="88"
+          font-family="Inter, -apple-system, Segoe UI, sans-serif"
+          font-size="11"
+          font-weight="500"
+          fill="#d4a574"
+          letter-spacing="6">TRADING &#183; PTY LTD</text>
+    <!-- Gold accent line -->
+    <line x1="0" y1="70" x2="60" y2="70" stroke="#d4a574" stroke-width="1.2"/>
+  </g>
+</svg>
