@@ -20,12 +20,12 @@
    ========================================================================== */
 
 export const firebaseConfig = {
-  apiKey: 'PASTE_API_KEY',
-  authDomain: 'PASTE_PROJECT.firebaseapp.com',
-  projectId: 'PASTE_PROJECT',
-  storageBucket: 'PASTE_PROJECT.appspot.com',
-  messagingSenderId: 'PASTE_SENDER_ID',
-  appId: 'PASTE_APP_ID',
+  apiKey: 'AIzaSyAnNnE3KrrY-jT7EpLC1eD-Z_s_xSFOm0Q',
+  authDomain: 'invoice-tracker-eucharisteo.firebaseapp.com',
+  projectId: 'invoice-tracker-eucharisteo',
+  storageBucket: 'invoice-tracker-eucharisteo.firebasestorage.app',
+  messagingSenderId: '717886349824',
+  appId: '1:717886349824:web:e8e8846e7026d6d24faee5',
 };
 
 /** Shared workspace document path. All users read/write the same company data. */
