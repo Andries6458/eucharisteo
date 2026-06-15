@@ -69,7 +69,7 @@ export function isFirebaseConfigured() {
 
 export const APP = {
   company: 'Eucharisteo Trading (Pty) Ltd',
-  brand: 'Eucharisteo · EC Trading',
+  brand: 'Eucharisteo Trading',
   reg: '2017/337151/07',
   vatNo: '4020319580',
   location: 'Vanderbijlpark, Gauteng, South Africa',

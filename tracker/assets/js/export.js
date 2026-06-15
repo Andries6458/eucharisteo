@@ -122,7 +122,7 @@ export async function exportPDF(invoices, refISO, partyFilter = null) {
   // header
   doc.setFillColor(...navy); doc.rect(0, 0, W, 70, 'F');
   doc.setTextColor(...gold); doc.setFont('helvetica', 'bold'); doc.setFontSize(18);
-  doc.text('Eucharisteo · EC Trading', 40, 32);
+  doc.text('Eucharisteo Trading', 40, 32);
   doc.setTextColor(245, 241, 235); doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
   const title = partyFilter
     ? `${PARTIES[partyFilter]?.name} — Invoice Statement`

@@ -1,7 +1,7 @@
 {
-  "name": "Eucharisteo EC Trading — Invoice Tracker",
-  "short_name": "EC Trading",
-  "description": "Private invoice tracker for Eucharisteo · EC Trading — Vulcan Mozambique & AMSA Vanderbijlpark.",
+  "name": "Eucharisteo Trading — Invoice Tracker",
+  "short_name": "Eucharisteo Trading",
+  "description": "Private invoice tracker for Eucharisteo Trading — Vulcan Mozambique & AMSA Vanderbijlpark.",
   "id": "/tracker/",
   "start_url": "./index.html",
   "scope": "./",

@@ -1,5 +1,5 @@
 /* Eucharisteo Invoice Tracker — service worker (offline + installability) */
-const CACHE = 'eucharisteo-tracker-v1';
+const CACHE = 'eucharisteo-tracker-v2';
 const ASSETS = [
   './',
   './index.html',
