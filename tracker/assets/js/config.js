@@ -31,6 +31,30 @@ export const firebaseConfig = {
 /** Shared workspace document path. All users read/write the same company data. */
 export const WORKSPACE_ID = 'eucharisteo';
 
+/**
+ * The Eucharisteo legal entities that issue / receive invoices.
+ *  - Invoices TO Vulcan Mozambique are issued by EC Trading LDA (Mozambique).
+ *  - AMSA Vanderbijlpark invoices Eucharisteo Trading (Pty) Ltd (South Africa).
+ * Fill in the blank EC Trading LDA fields (NUIT, reg, address) when you have
+ * them — they appear on the Vulcan invoice PDFs.
+ */
+export const ENTITIES = {
+  ECT_LDA: {
+    name: 'EC Trading LDA',
+    country: 'Mozambique',
+    reg: '',     // commercial registration (NUEL) — fill in
+    taxNo: '',   // NUIT (Mozambique tax number) — fill in
+    address: '', // Mozambique address — fill in
+  },
+  EUCHARISTEO_SA: {
+    name: 'Eucharisteo Trading (Pty) Ltd',
+    country: 'South Africa',
+    reg: '2017/337151/07',
+    vatNo: '4020319580',
+    address: 'Vanderbijlpark, Gauteng, South Africa',
+  },
+};
+
 /** True only when the placeholders above have been replaced with real values. */
 export function isFirebaseConfigured() {
   return (

@@ -4,10 +4,12 @@ A private, installable invoice tracker for **Eucharisteo Trading (Pty) Ltd**.
 
 It tracks two money flows:
 
-| Party | Flow | Currency (default) | VAT (default) |
-|---|---|---|---|
-| **Vulcan Mozambique** | Receivable — *you* invoice them | USD | No VAT |
-| **AMSA Vanderbijlpark** | Payable — *they* invoice you | ZAR (Rand) | VAT included (15%) |
+| Party | Flow | Eucharisteo entity | Currency (default) | VAT (default) |
+|---|---|---|---|---|
+| **Vulcan Mozambique** | Receivable — *you* invoice them | **EC Trading LDA** (Mozambique) | USD | No VAT |
+| **AMSA Vanderbijlpark** | Payable — *they* invoice you | **Eucharisteo Trading (Pty) Ltd** (RSA) | ZAR (Rand) | VAT included (15%) |
+
+Invoices to Vulcan are issued by **EC Trading LDA**; the AMSA side sits under **Eucharisteo Trading (Pty) Ltd**. The correct entity appears on each invoice PDF and on the dashboard. Add EC Trading LDA's NUIT / registration / address in `assets/js/config.js` (the `ENTITIES` block) to have them printed on the Vulcan invoice PDFs.
 
 Currency and VAT are editable per invoice, so you can mix USD / ZAR / MZN / EUR / GBP.
 

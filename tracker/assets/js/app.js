@@ -13,7 +13,7 @@ import {
 import {
   exportExcel, exportPDF, exportInvoicePDF, parseTable,
 } from './export.js';
-import { APP, isFirebaseConfigured } from './config.js';
+import { APP, ENTITIES, isFirebaseConfigured } from './config.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -138,8 +138,8 @@ function renderSummary() {
     const data = byParty[key];
     const card = el('div', 'pcard');
     const flow = meta.direction === 'RECEIVABLE'
-      ? 'Receivable · Eucharisteo invoices them'
-      : 'Payable · they invoice Eucharisteo';
+      ? `Receivable · ${meta.selfEntityName} invoices ${meta.short}`
+      : `Payable · ${meta.short} invoices ${meta.selfEntityName}`;
     let html = `<h3>${esc(meta.name)}${data?.overdue ? `<span class="pill pill-red">${data.overdue} overdue</span>` : ''}</h3>`
       + `<div class="flow">${flow}</div>`;
     if (!data) {
@@ -296,6 +296,7 @@ function openInvoiceModal(id) {
         <div class="field"><label>Party</label><select id="f-party">${partyOptions}</select></div>
         <div class="field"><label>Invoice number</label><input id="f-num" value="${esc(draft.invoiceNumber)}" placeholder="e.g. INV-0420"></div>
       </div>
+      <div id="f-entity-note" class="entity-note"></div>
       <div class="field">
         <label>CT numbers <span class="muted" style="text-transform:none;letter-spacing:0">— type and press Enter (or paste comma/space separated)</span></label>
         <div class="chips" id="f-chips"><input id="f-chip-input" placeholder="Add CT number…"></div>
@@ -443,7 +444,15 @@ function openInvoiceModal(id) {
   });
 
   /* ---- header fields ---- */
-  $('#f-party', modal).addEventListener('change', (e) => { draft.party = e.target.value; });
+  const entityText = (party) => {
+    const p = PARTIES[party];
+    return p.direction === 'RECEIVABLE'
+      ? `🧾 Issued by ${p.selfEntityName} → invoiced to ${p.name}`
+      : `🧾 ${p.name} → invoices ${p.selfEntityName}`;
+  };
+  const setEntityNote = () => { $('#f-entity-note', modal).textContent = entityText(draft.party); };
+  $('#f-party', modal).addEventListener('change', (e) => { draft.party = e.target.value; setEntityNote(); });
+  setEntityNote();
   $('#f-num', modal).addEventListener('input', (e) => { draft.invoiceNumber = e.target.value; });
   $('#f-cur', modal).addEventListener('change', (e) => { draft.currency = e.target.value; renderItems(); renderPays(); });
   $('#f-vat', modal).addEventListener('change', (e) => { draft.vatMode = e.target.value; renderTotals(); });
@@ -604,8 +613,11 @@ function openMenu() {
         <p class="muted" style="font-size:.78rem;margin-top:.4rem">A JSON backup lets you move all invoices between devices or restore after a reset.${cloud ? ' Importing adds/updates invoices in the shared cloud.' : ''}</p>
       </div>
       <div class="field">
-        <label>Company</label>
-        <p class="muted" style="font-size:.85rem">${esc(APP.company)} · Reg ${esc(APP.reg)} · VAT ${esc(APP.vatNo)}<br>${esc(APP.location)}</p>
+        <label>Invoicing entities</label>
+        <p class="muted" style="font-size:.85rem">
+          <b>EC Trading LDA</b> (Mozambique) — invoices <b>Vulcan Mozambique</b>${ENTITIES.ECT_LDA.taxNo ? ` · NUIT ${esc(ENTITIES.ECT_LDA.taxNo)}` : ' · NUIT/reg to be added'}<br>
+          <b>Eucharisteo Trading (Pty) Ltd</b> (RSA) — invoiced by <b>AMSA Vanderbijlpark</b> · Reg ${esc(ENTITIES.EUCHARISTEO_SA.reg)} · VAT ${esc(ENTITIES.EUCHARISTEO_SA.vatNo)}
+        </p>
       </div>
       <div class="field">
         <label>Install as app / APK</label>

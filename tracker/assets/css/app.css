@@ -175,6 +175,8 @@ table.inv .num{text-align:right;font-variant-numeric:tabular-nums;white-space:no
   padding:.6rem .7rem;border-radius:var(--radius-sm);outline:none;transition:border .2s}
 .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--gold)}
 .field textarea{min-height:64px;resize:vertical}
+.entity-note{font-size:.82rem;color:var(--gold);background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--radius-sm);padding:.5rem .7rem;margin:-.3rem 0 1rem}
 .grid2{display:grid;gap:1rem;grid-template-columns:1fr 1fr}
 .grid3{display:grid;gap:1rem;grid-template-columns:1fr 1fr 1fr}
 @media(max-width:640px){.grid2,.grid3{grid-template-columns:1fr}}

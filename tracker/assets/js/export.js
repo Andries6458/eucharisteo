@@ -7,6 +7,7 @@
 import {
   PARTIES, computeInvoice, summarise, fmtMoney, fmtDate, STATUS_LABEL, fmtNumber,
 } from './calc.js';
+import { ENTITIES } from './config.js';
 
 const CDN = {
   xlsx: 'https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js',
@@ -121,14 +122,14 @@ export async function exportPDF(invoices, refISO, partyFilter = null) {
   // header
   doc.setFillColor(...navy); doc.rect(0, 0, W, 70, 'F');
   doc.setTextColor(...gold); doc.setFont('helvetica', 'bold'); doc.setFontSize(18);
-  doc.text('Eucharisteo Trading (Pty) Ltd', 40, 32);
+  doc.text('Eucharisteo · EC Trading', 40, 32);
   doc.setTextColor(245, 241, 235); doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
   const title = partyFilter
     ? `${PARTIES[partyFilter]?.name} — Invoice Statement`
     : 'Invoice Statement — All Parties';
   doc.text(title, 40, 50);
   doc.setFontSize(8);
-  doc.text(`Generated ${fmtDate(refISO)}  ·  Reg ${'2017/337151/07'}  ·  VAT 4020319580`, 40, 62);
+  doc.text(`EC Trading LDA (Mozambique / Vulcan)  ·  Eucharisteo Trading (Pty) Ltd (RSA / AMSA)  ·  ${fmtDate(refISO)}`, 40, 62);
 
   // summary blocks
   let y = 90;
@@ -201,13 +202,22 @@ export async function exportInvoicePDF(rawInvoice, refISO) {
   const gold = [166, 129, 79], navy = [10, 14, 26];
   const W = doc.internal.pageSize.getWidth();
 
+  const party = PARTIES[i.party] || {};
+  const ent = ENTITIES[party.selfEntityKey] || {};
+  const isRec = party.direction === 'RECEIVABLE';
   doc.setFillColor(...navy); doc.rect(0, 0, W, 80, 'F');
   doc.setTextColor(...gold); doc.setFont('helvetica', 'bold'); doc.setFontSize(18);
-  doc.text('Eucharisteo Trading (Pty) Ltd', 40, 34);
+  doc.text(ent.name || 'Eucharisteo Trading', 40, 34);
   doc.setTextColor(245, 241, 235); doc.setFontSize(10); doc.setFont('helvetica', 'normal');
-  doc.text(`Invoice record — ${PARTIES[i.party]?.name || i.party}`, 40, 54);
+  doc.text(`${isRec ? 'Invoice to' : 'Invoice from'}: ${party.name || i.party}`, 40, 54);
   doc.setFontSize(8);
-  doc.text(`Reg 2017/337151/07 · VAT 4020319580 · ${i.currency || ''}`, 40, 68);
+  const idLine = [
+    ent.reg && `Reg ${ent.reg}`,
+    ent.vatNo && `VAT ${ent.vatNo}`,
+    ent.taxNo && `NUIT ${ent.taxNo}`,
+    ent.country, i.currency,
+  ].filter(Boolean).join(' · ');
+  doc.text(idLine, 40, 68);
 
   let y = 110;
   doc.setTextColor(...navy); doc.setFontSize(10);

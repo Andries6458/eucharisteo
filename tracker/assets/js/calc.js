@@ -13,6 +13,9 @@ export const PARTIES = {
     defaultCurrency: 'USD',
     defaultVatMode: 'NONE',
     defaultTermsDays: 30,
+    /* Eucharisteo's entity for this relationship: the Mozambique company */
+    selfEntityKey: 'ECT_LDA',
+    selfEntityName: 'EC Trading LDA',
   },
   AMSA: {
     key: 'AMSA',
@@ -23,6 +26,9 @@ export const PARTIES = {
     defaultCurrency: 'ZAR',
     defaultVatMode: 'INCLUSIVE',
     defaultTermsDays: 30,
+    /* Eucharisteo's entity for this relationship: the South African company */
+    selfEntityKey: 'EUCHARISTEO_SA',
+    selfEntityName: 'Eucharisteo Trading (Pty) Ltd',
   },
 };
 
