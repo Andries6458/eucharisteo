@@ -43,9 +43,14 @@ export function isFirebaseConfigured() {
 
 export const APP = {
   company: 'Eucharisteo Trading (Pty) Ltd',
+  brand: 'Eucharisteo · EC Trading',
   reg: '2017/337151/07',
   vatNo: '4020319580',
   location: 'Vanderbijlpark, Gauteng, South Africa',
-  dueSoonDays: 7,     // "due soon" reminder window
-  stalenessDays: 30,  // flag invoices with no activity for this many days
+
+  // ----- reminder rules -----
+  leadTimeDays: [7, 3, 1],       // nudge this many days BEFORE the due date
+  overdueTiers: [7, 14, 30, 60], // escalating overdue alerts; top tier = CRITICAL
+  stalenessDays: 30,             // flag invoices with no payment activity for this long
+  weeklySummaryDay: 1,           // 0=Sun … 1=Mon: send the weekly outstanding summary
 };

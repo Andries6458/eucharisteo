@@ -109,6 +109,15 @@ a{color:var(--gold);text-decoration:none}
 .rem-dot{width:9px;height:9px;border-radius:50%;margin-top:.4rem;flex-shrink:0}
 .rem-overdue .rem-dot{background:var(--red)} .rem-due-soon .rem-dot{background:var(--amber)}
 .rem-stale .rem-dot{background:var(--blue)}
+.rem-critical .rem-dot{background:#ff3b30;box-shadow:0 0 0 0 rgba(255,59,48,.6);animation:pulse 1.8s infinite}
+.rem-critical .t{color:#ff6b5e}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,59,48,.5)}70%{box-shadow:0 0 0 7px rgba(255,59,48,0)}100%{box-shadow:0 0 0 0 rgba(255,59,48,0)}}
+.rem-summary{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;background:var(--surface2);
+  border:1px solid var(--border);border-radius:var(--radius-sm);padding:.55rem .7rem;margin-bottom:.7rem}
+.rem-summary .sum-label{font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--gold-deep);font-weight:700}
+.sum-chip{font-size:.82rem;background:var(--graphite);border:1px solid var(--border);border-radius:99px;padding:.22rem .6rem;font-variant-numeric:tabular-nums}
+.sum-chip b{color:var(--gold)}
+.sum-od{color:var(--red);font-weight:700;font-size:.72rem}
 .rem-item .t{font-weight:600;font-size:.9rem}
 .rem-item .d{font-size:.8rem;color:var(--muted)}
 .empty{color:var(--muted);font-style:italic;padding:.5rem 0}

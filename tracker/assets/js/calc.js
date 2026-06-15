@@ -12,6 +12,7 @@ export const PARTIES = {
     direction: 'RECEIVABLE',
     defaultCurrency: 'USD',
     defaultVatMode: 'NONE',
+    defaultTermsDays: 30,
   },
   AMSA: {
     key: 'AMSA',
@@ -21,6 +22,7 @@ export const PARTIES = {
     direction: 'PAYABLE',
     defaultCurrency: 'ZAR',
     defaultVatMode: 'INCLUSIVE',
+    defaultTermsDays: 30,
   },
 };
 
@@ -209,44 +211,68 @@ export function summarise(invoices, refISO = todayISO()) {
   return { computed, byParty };
 }
 
-/** Build the reminder feed (most urgent first). */
+/** Highest overdue tier reached (e.g. 7/14/30/60), or 0 if below the first. */
+export function overdueTier(daysOverdue, tiers = [7, 14, 30, 60]) {
+  let reached = 0;
+  for (const t of tiers) if (daysOverdue >= t) reached = t;
+  return reached;
+}
+
+/**
+ * Build the reminder feed (most urgent first). Supports:
+ *  - escalating overdue tiers (with a CRITICAL level at the top tier)
+ *  - lead-time nudges before the due date (e.g. 7 / 3 / 1 days out)
+ *  - stale invoices (no payment activity for N days)
+ */
 export function buildReminders(invoices, refISO = todayISO(), opts = {}) {
-  const dueSoonDays = opts.dueSoonDays ?? 7;
+  const leadTimes = opts.leadTimeDays ?? [7, 3, 1];
+  const tiers = opts.overdueTiers ?? [7, 14, 30, 60];
   const stalenessDays = opts.stalenessDays ?? 30;
+  const maxLead = Math.max(...leadTimes, 0);
+  const topTier = tiers[tiers.length - 1];
   const out = [];
 
   for (const raw of invoices) {
     const inv = computeInvoice(raw, refISO);
-    if (inv._status === 'PAID') continue;
+    if (inv._status === 'PAID' || inv._balance <= 0.005) continue;
 
-    if (inv._status === 'OVERDUE') {
+    if (inv._daysToDue != null && inv._daysToDue < 0) {
+      // OVERDUE — escalate by tier
+      const d = inv._daysOverdue;
+      const tier = overdueTier(d, tiers);
+      const critical = d >= topTier;
       out.push({
-        level: 'overdue',
-        priority: 100 + inv._daysOverdue,
+        level: critical ? 'critical' : 'overdue',
+        tier,
+        atLeadMark: leadTimes.includes(0), // (not used for overdue)
+        priority: 200 + d,
         invoice: inv,
-        title: `${ref(inv)} is ${inv._daysOverdue} day${plural(inv._daysOverdue)} overdue`,
+        title: `${ref(inv)} is ${d} day${plural(d)} overdue`
+          + (critical ? ' — CRITICAL' : tier ? ` (${tier}+ days)` : ''),
         detail: `${PARTIES[inv.party]?.name} · balance ${fmtMoney(inv._balance, inv.currency)} · due ${fmtDate(inv.dueDate)}`,
       });
-    } else if (inv._daysToDue != null && inv._daysToDue <= dueSoonDays) {
+    } else if (inv._daysToDue != null && inv._daysToDue <= maxLead) {
+      // DUE SOON — within the lead-time window
+      const d = inv._daysToDue;
       out.push({
         level: 'due-soon',
-        priority: 50 - inv._daysToDue,
+        atLeadMark: leadTimes.includes(d) || d === 0,
+        priority: 100 - d,
         invoice: inv,
-        title: `${ref(inv)} due in ${inv._daysToDue} day${plural(inv._daysToDue)}`,
+        title: d === 0 ? `${ref(inv)} is due today` : `${ref(inv)} due in ${d} day${plural(d)}`,
         detail: `${PARTIES[inv.party]?.name} · balance ${fmtMoney(inv._balance, inv.currency)} · due ${fmtDate(inv.dueDate)}`,
       });
     }
 
-    // No movement for a long time
+    // STALE — no payment movement for a long time (and not already overdue)
     if (
-      inv._balance > 0.005 &&
       inv._daysSinceActivity != null &&
       inv._daysSinceActivity >= stalenessDays &&
-      inv._status !== 'OVERDUE'
+      !(inv._daysToDue != null && inv._daysToDue < 0)
     ) {
       out.push({
         level: 'stale',
-        priority: 10 + (inv._daysSinceActivity - stalenessDays),
+        priority: 20 + (inv._daysSinceActivity - stalenessDays),
         invoice: inv,
         title: `No payment activity on ${ref(inv)} for ${inv._daysSinceActivity} days`,
         detail: `${PARTIES[inv.party]?.name} · balance ${fmtMoney(inv._balance, inv.currency)}`,
@@ -255,6 +281,28 @@ export function buildReminders(invoices, refISO = todayISO(), opts = {}) {
   }
 
   return out.sort((a, b) => b.priority - a.priority);
+}
+
+/** One-line outstanding totals per party (for the weekly summary banner). */
+export function outstandingSummaryLines(invoices, refISO = todayISO()) {
+  const { byParty } = summarise(invoices, refISO);
+  const lines = [];
+  for (const key of ['VULCAN', 'AMSA']) {
+    const data = byParty[key];
+    if (!data) continue;
+    const parts = Object.entries(data.currencies)
+      .filter(([, c]) => c.outstanding > 0.005)
+      .map(([cur, c]) => fmtMoney(c.outstanding, cur));
+    if (parts.length) {
+      lines.push({
+        party: key,
+        name: PARTIES[key].name,
+        text: parts.join('  +  '),
+        overdue: data.overdue,
+      });
+    }
+  }
+  return lines;
 }
 
 function ref(inv) {

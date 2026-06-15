@@ -16,7 +16,7 @@ Currency and VAT are editable per invoice, so you can mix USD / ZAR / MZN / EUR 
 - **Auto-calculates** every line (qty × unit price), the invoice total, the VAT split for AMSA, payments, and the outstanding balance.
 - **Per-party / per-currency totals**: invoiced, paid, outstanding, overdue count.
 - **CT numbers** added manually per invoice (type + Enter, or paste a list) — fully searchable.
-- **Reminders**: overdue, due-soon (within 7 days), and "no activity for 30+ days", with optional device notifications.
+- **Reminders**: lead-time nudges before the due date (7 / 3 / 1 days out), **escalating overdue tiers** (7 / 14 / 30 / 60 days, with a CRITICAL level at 60+), a "no activity for 30+ days" flag, and a **weekly outstanding summary** — all with optional device notifications. Default payment terms auto-fill the due date 30 days after the invoice date for both parties (editable per invoice). Tune any of these in `assets/js/config.js`.
 - **Excel + PDF export**: full ledger, per-party statements, and single-invoice PDFs.
 - **Copy / paste** invoices and line items straight from Excel or your Windows PC.
 - **Up to 6 users** on phones (Android), Windows, Mac — sharing the same live data across countries (via Firebase).
@@ -70,6 +70,29 @@ Done. Now everyone signs in with their email/password and sees the same live inv
 - **iPhone (Safari):** **Share → Add to Home Screen**.
 
 It then opens full-screen like a normal app, works offline, and shows on the home screen / Start menu.
+
+The site is deployed by **`.github/workflows/deploy-pages.yml`** to GitHub Pages on every push to `main`. Default live URL:
+
+- `https://andries6458.github.io/eucharisteo/`            (company website)
+- `https://andries6458.github.io/eucharisteo/tracker/`    (invoice tracker)
+
+---
+
+## 3a. Custom domain (optional, recommended for a clean / bar-free app)
+
+Pointing a subdomain such as **`tracker.eucharisteotrading.co.za`** at the site gives a tidy URL and lets the Android APK run **without the browser address bar** (via Digital Asset Links).
+
+**Step 1 — add a DNS record** at whoever hosts DNS for `eucharisteotrading.co.za`:
+
+| Type  | Name / Host | Value / Target            | TTL  |
+|-------|-------------|---------------------------|------|
+| CNAME | `tracker`   | `andries6458.github.io.`  | Auto |
+
+**Step 2 — attach the domain** (do this *after* the DNS record exists, so the live site never goes dark): add a file named `CNAME` (no extension) at the repo root containing exactly `tracker.eucharisteotrading.co.za`, then push. GitHub serves the site on the new domain over HTTPS (it auto-provisions the certificate, which can take a few minutes).
+
+**Step 3 — bar-free APK (optional):** after building the APK with PWABuilder, copy the SHA-256 signing-cert fingerprint it gives you into `.well-known/assetlinks.json` (a template is in the repo), then rebuild. The app then opens with no address bar.
+
+> The live tracker URL then becomes `https://tracker.eucharisteotrading.co.za/tracker/`.
 
 ---
 

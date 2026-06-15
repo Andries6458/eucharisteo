@@ -7,7 +7,7 @@ import {
 } from './store.js';
 import {
   PARTIES, CURRENCIES, VAT_RATE, computeInvoice, summarise, buildReminders,
-  fmtMoney, fmtDate, fmtNumber, todayISO, addDays, dayDiff,
+  outstandingSummaryLines, fmtMoney, fmtDate, fmtNumber, todayISO, addDays, dayDiff,
   STATUS_LABEL, subtotalOf, paidOf,
 } from './calc.js';
 import {
@@ -159,21 +159,45 @@ function renderSummary() {
   }
 }
 
+function reminderOpts() {
+  return {
+    leadTimeDays: APP.leadTimeDays,
+    overdueTiers: APP.overdueTiers,
+    stalenessDays: APP.stalenessDays,
+  };
+}
+
 function renderReminders() {
-  const list = buildReminders(state.invoices, todayISO(),
-    { dueSoonDays: APP.dueSoonDays, stalenessDays: APP.stalenessDays });
+  const today = todayISO();
+  const list = buildReminders(state.invoices, today, reminderOpts());
   const host = $('#reminders-list');
   host.innerHTML = '';
-  const count = list.filter((r) => r.level !== 'stale').length;
+
+  // weekly outstanding summary banner
+  const sumHost = $('#reminders-summary');
+  const sum = outstandingSummaryLines(state.invoices, today);
+  if (sumHost) {
+    if (sum.length) {
+      sumHost.classList.remove('hidden');
+      sumHost.innerHTML = '<span class="sum-label">Outstanding</span>' + sum.map((s) =>
+        `<span class="sum-chip"><b>${esc(PARTIES[s.party].short)}</b> ${esc(s.text)}`
+        + `${s.overdue ? ` <span class="sum-od">${s.overdue} overdue</span>` : ''}</span>`).join('');
+    } else {
+      sumHost.classList.add('hidden');
+      sumHost.innerHTML = '';
+    }
+  }
+
+  const count = list.filter((r) => ['critical', 'overdue', 'due-soon'].includes(r.level)).length;
   const bc = $('#bell-count');
-  if (count > 0) { bc.textContent = count; bc.classList.remove('hidden'); }
+  if (count > 0) { bc.textContent = count > 99 ? '99+' : count; bc.classList.remove('hidden'); }
   else bc.classList.add('hidden');
 
   if (!list.length) {
     host.innerHTML = '<div class="empty">Nothing due — all invoices are on track. 🎉</div>';
     return;
   }
-  list.slice(0, 12).forEach((r) => {
+  list.slice(0, 20).forEach((r) => {
     const item = el('div', `rem-item rem-${r.level}`);
     item.innerHTML = `<span class="rem-dot"></span><div><div class="t">${esc(r.title)}</div><div class="d">${esc(r.detail)}</div></div>`;
     item.addEventListener('click', () => openInvoiceModal(r.invoice.id));
@@ -234,7 +258,7 @@ function blankInvoice(party = 'VULCAN') {
     id: null, party,
     invoiceNumber: '', ctNumbers: [],
     currency: meta.defaultCurrency, vatMode: meta.defaultVatMode,
-    issueDate: todayISO(), dueDate: addDays(todayISO(), 30),
+    issueDate: todayISO(), dueDate: addDays(todayISO(), meta.defaultTermsDays ?? 30),
     items: [{ description: '', qty: 1, unitPrice: 0 }],
     payments: [], notes: '',
   };
@@ -630,17 +654,49 @@ function updateNotifyButton() {
 function fireReminderNotifications() {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   const today = todayISO();
+
+  // ----- daily attention alert (overdue/critical + lead-time marks), once/day -----
   const seenKey = 'eucharisteo:notified:' + today;
-  if (localStorage.getItem(seenKey)) return;
-  const rems = buildReminders(state.invoices, today, { dueSoonDays: APP.dueSoonDays, stalenessDays: APP.stalenessDays })
-    .filter((r) => r.level === 'overdue' || r.level === 'due-soon');
-  if (rems.length) {
-    new Notification('Eucharisteo Invoice Tracker', {
-      body: rems.length === 1 ? rems[0].title : `${rems.length} invoices need attention (overdue / due soon).`,
-      icon: 'assets/icons/icon-192.png', tag: 'eucharisteo-reminders',
-    });
-    localStorage.setItem(seenKey, '1');
+  if (!localStorage.getItem(seenKey)) {
+    const rems = buildReminders(state.invoices, today, reminderOpts())
+      .filter((r) => r.level === 'critical' || r.level === 'overdue'
+        || (r.level === 'due-soon' && r.atLeadMark));
+    if (rems.length) {
+      const crit = rems.filter((r) => r.level === 'critical').length;
+      new Notification(APP.brand + ' — Invoice Tracker', {
+        body: rems.length === 1 ? rems[0].title
+          : `${rems.length} invoices need attention${crit ? `, ${crit} CRITICAL` : ''} (overdue / due soon).`,
+        icon: 'assets/icons/icon-192.png', tag: 'eucharisteo-reminders',
+      });
+      localStorage.setItem(seenKey, '1');
+    }
   }
+
+  // ----- weekly outstanding summary, once per ISO week on the chosen weekday -----
+  if (new Date().getUTCDay() === (APP.weeklySummaryDay ?? 1)) {
+    const wkKey = 'eucharisteo:weekly:' + isoWeekKey(new Date());
+    if (!localStorage.getItem(wkKey)) {
+      const lines = outstandingSummaryLines(state.invoices, today);
+      if (lines.length) {
+        new Notification(APP.brand + ' — Weekly outstanding', {
+          body: lines.map((l) => `${PARTIES[l.party].short}: ${l.text}`
+            + `${l.overdue ? ` (${l.overdue} overdue)` : ''}`).join('\n'),
+          icon: 'assets/icons/icon-192.png', tag: 'eucharisteo-weekly',
+        });
+        localStorage.setItem(wkKey, '1');
+      }
+    }
+  }
+}
+
+function isoWeekKey(d) {
+  const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const dayNum = (date.getUTCDay() + 6) % 7;
+  date.setUTCDate(date.getUTCDate() - dayNum + 3);
+  const firstThursday = new Date(Date.UTC(date.getUTCFullYear(), 0, 4));
+  const week = 1 + Math.round(
+    ((date - firstThursday) / 86400000 - 3 + ((firstThursday.getUTCDay() + 6) % 7)) / 7);
+  return `${date.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
 }
 
 /* ============================ helpers ============================ */
