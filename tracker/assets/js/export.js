@@ -212,12 +212,16 @@ export async function exportInvoicePDF(rawInvoice, refISO) {
   doc.text(`${isRec ? 'Invoice to' : 'Invoice from'}: ${party.name || i.party}`, 40, 54);
   doc.setFontSize(8);
   const idLine = [
-    ent.reg && `Reg ${ent.reg}`,
+    ent.reg && `${ent.regLabel || 'Reg'} ${ent.reg}`,
     ent.vatNo && `VAT ${ent.vatNo}`,
     ent.taxNo && `NUIT ${ent.taxNo}`,
     ent.country, i.currency,
   ].filter(Boolean).join(' · ');
   doc.text(idLine, 40, 68);
+  if (ent.address) {
+    doc.setTextColor(150, 150, 150); doc.setFontSize(8);
+    doc.text(ent.address, 40, 96);
+  }
 
   let y = 110;
   doc.setTextColor(...navy); doc.setFontSize(10);

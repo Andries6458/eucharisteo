@@ -40,16 +40,18 @@ export const WORKSPACE_ID = 'eucharisteo';
  */
 export const ENTITIES = {
   ECT_LDA: {
-    name: 'EC Trading LDA',
+    name: 'EC Trading Limitada, LDA',
     country: 'Mozambique',
-    reg: '',     // commercial registration (NUEL) — fill in
-    taxNo: '',   // NUIT (Mozambique tax number) — fill in
-    address: '', // Mozambique address — fill in
+    reg: '129/05/01/P8/2025',   // Alvará registration number
+    regLabel: 'Alvará',
+    taxNo: '402068264',         // NUIT (Mozambique tax number)
+    address: 'Bairro Chingodzi, Quarteirão N/A, Casa No. 0, Andar R/C, Tete, Mozambique',
   },
   EUCHARISTEO_SA: {
     name: 'Eucharisteo Trading (Pty) Ltd',
     country: 'South Africa',
     reg: '2017/337151/07',
+    regLabel: 'Reg',
     vatNo: '4020319580',
     address: 'Vanderbijlpark, Gauteng, South Africa',
   },

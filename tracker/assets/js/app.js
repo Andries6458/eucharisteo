@@ -615,8 +615,10 @@ function openMenu() {
       <div class="field">
         <label>Invoicing entities</label>
         <p class="muted" style="font-size:.85rem">
-          <b>EC Trading LDA</b> (Mozambique) — invoices <b>Vulcan Mozambique</b>${ENTITIES.ECT_LDA.taxNo ? ` · NUIT ${esc(ENTITIES.ECT_LDA.taxNo)}` : ' · NUIT/reg to be added'}<br>
-          <b>Eucharisteo Trading (Pty) Ltd</b> (RSA) — invoiced by <b>AMSA Vanderbijlpark</b> · Reg ${esc(ENTITIES.EUCHARISTEO_SA.reg)} · VAT ${esc(ENTITIES.EUCHARISTEO_SA.vatNo)}
+          <b>EC Trading Limitada, LDA</b> (Mozambique) — invoices <b>Vulcan Mozambique</b><br>
+          <span style="opacity:.8">Alvará ${esc(ENTITIES.ECT_LDA.reg)} · NUIT ${esc(ENTITIES.ECT_LDA.taxNo)}<br>${esc(ENTITIES.ECT_LDA.address)}</span><br><br>
+          <b>Eucharisteo Trading (Pty) Ltd</b> (RSA) — invoiced by <b>AMSA Vanderbijlpark</b><br>
+          <span style="opacity:.8">Reg ${esc(ENTITIES.EUCHARISTEO_SA.reg)} · VAT ${esc(ENTITIES.EUCHARISTEO_SA.vatNo)}</span>
         </p>
       </div>
       <div class="field">
