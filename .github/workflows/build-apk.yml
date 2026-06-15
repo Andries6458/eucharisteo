@@ -58,6 +58,12 @@ jobs:
       - name: Install Bubblewrap
         run: npm install -g @bubblewrap/cli
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept Android SDK licences
+        run: yes | sdkmanager --licenses >/dev/null 2>&1 || true
+
       - name: Initialise TWA project
         env:
           BASE_URL: ${{ github.event.inputs.base_url }}
@@ -68,7 +74,7 @@ jobs:
             --manifest "${BASE_URL%/}/manifest.webmanifest" \
             --directory . \
             --packageId co.za.eucharisteotrading.invoices \
-            --skipPwaValidation || true
+            --skipPwaValidation
 
       - name: Restore signing keystore (if provided)
         id: keystore
@@ -91,15 +97,13 @@ jobs:
           KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           if [ "$HAVE_KS" = "true" ]; then
-            bubblewrap build \
-              --skipPwaValidation \
-              --signingKeyPath ./android.keystore \
-              --signingKeyAlias "$KEY_ALIAS" || bubblewrap build --skipPwaValidation
+            bubblewrap build --skipPwaValidation \
+              --signingKeyPath ./android.keystore --signingKeyAlias "$KEY_ALIAS"
           else
-            # No release keystore -> produce the unsigned/debug build for testing
-            bubblewrap build --skipPwaValidation || true
+            bubblewrap build --skipPwaValidation
           fi
-          ls -R . | grep -i ".apk" || true
+          echo "--- APK files produced ---"
+          find . -iname "*.apk"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -108,4 +112,4 @@ jobs:
           path: |
             twa/*.apk
             twa/app/build/outputs/**/*.apk
-          if-no-files-found: warn
+          if-no-files-found: error
