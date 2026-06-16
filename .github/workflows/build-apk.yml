@@ -1,39 +1,11 @@
-# =============================================================================
-# Build an Android APK of the Eucharisteo Invoice Tracker (PWA -> TWA).
-#
-# This is OPTIONAL and runs only when you start it manually (Actions tab ->
-# "Build Invoice Tracker APK" -> Run workflow). The easiest path is still
-# PWABuilder.com (see tracker/README.md); this workflow automates the same
-# thing with Bubblewrap and gives you the APK as a downloadable artifact.
-#
-# PREREQUISITES
-#   1. Deploy the tracker somewhere on HTTPS so the manifest is reachable,
-#      e.g. https://eucharisteotrading.co.za/tracker/  (GitHub Pages works).
-#   2. Run this workflow and enter that base URL when prompted.
-#
-# SIGNING
-#   For real, updatable releases create a keystore once and add these repo
-#   secrets (Settings -> Secrets and variables -> Actions):
-#       ANDROID_KEYSTORE_BASE64   (base64 of your .keystore file)
-#       ANDROID_KEYSTORE_PASSWORD
-#       ANDROID_KEY_ALIAS
-#       ANDROID_KEY_PASSWORD
-#   To create one locally:
-#       keytool -genkey -v -keystore eucharisteo.keystore -alias eucharisteo \
-#               -keyalg RSA -keysize 2048 -validity 10000
-#       base64 -w0 eucharisteo.keystore   # paste output into the secret
-#   Without these secrets the build uses a throwaway debug key (installs fine
-#   for testing, but you cannot ship signed updates with it).
-# =============================================================================
+# Builds an installable Android APK of the tracker — no PWABuilder needed.
+# Run it from the Actions tab: "Build Invoice Tracker APK" -> Run workflow.
+# When it finishes, open the run and download the "eucharisteo-invoice-tracker-apk"
+# artifact (a .zip containing the .apk).
 name: Build Invoice Tracker APK
 
 on:
   workflow_dispatch:
-    inputs:
-      base_url:
-        description: "Deployed tracker base URL (must end with /tracker/)"
-        required: true
-        default: "https://eucharisteotrading.co.za/tracker/"
 
 permissions:
   contents: read
@@ -42,8 +14,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -55,53 +25,80 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Install Bubblewrap
-        run: npm install -g @bubblewrap/cli
-
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
       - name: Accept Android SDK licences
         run: yes | sdkmanager --licenses >/dev/null 2>&1 || true
 
-      - name: Initialise TWA project
-        env:
-          BASE_URL: ${{ github.event.inputs.base_url }}
-        run: |
-          mkdir -p twa && cd twa
-          # Bubblewrap reads the deployed manifest to scaffold the Android project
-          bubblewrap init \
-            --manifest "${BASE_URL%/}/manifest.webmanifest" \
-            --directory . \
-            --packageId co.za.eucharisteotrading.invoices \
-            --skipPwaValidation
+      - name: Install Bubblewrap
+        run: npm install -g @bubblewrap/cli
 
-      - name: Restore signing keystore (if provided)
-        id: keystore
-        env:
-          KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      - name: Point Bubblewrap at the JDK and Android SDK
         run: |
-          if [ -n "$KS" ]; then
-            echo "$KS" | base64 -d > twa/android.keystore
-            echo "have_keystore=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "have_keystore=false" >> "$GITHUB_OUTPUT"
-          fi
+          mkdir -p ~/.bubblewrap
+          cat > ~/.bubblewrap/config.json <<EOF
+          { "jdkPath": "${JAVA_HOME}", "androidSdkPath": "${ANDROID_SDK_ROOT}" }
+          EOF
+          cat ~/.bubblewrap/config.json
+
+      - name: Create signing keystore
+        run: |
+          keytool -genkeypair -v \
+            -keystore android.keystore \
+            -alias eucharisteo \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass eucharisteo123 -keypass eucharisteo123 \
+            -dname "CN=Eucharisteo Trading, OU=IT, O=Eucharisteo Trading, L=Vanderbijlpark, ST=Gauteng, C=ZA"
+
+      - name: Write Bubblewrap project manifest
+        run: |
+          cat > twa-manifest.json <<'EOF'
+          {
+            "packageId": "za.co.eucharisteotrading.tracker",
+            "host": "tracker.eucharisteotrading.co.za",
+            "name": "Eucharisteo Trading",
+            "launcherName": "Eucharisteo Trading",
+            "display": "standalone",
+            "themeColor": "#0a0e1a",
+            "themeColorDark": "#0a0e1a",
+            "navigationColor": "#0a0e1a",
+            "navigationColorDark": "#0a0e1a",
+            "navigationDividerColor": "#0a0e1a",
+            "navigationDividerColorDark": "#0a0e1a",
+            "backgroundColor": "#0a0e1a",
+            "enableNotifications": false,
+            "startUrl": "/tracker/",
+            "iconUrl": "https://tracker.eucharisteotrading.co.za/tracker/assets/icons/icon-512.png",
+            "maskableIconUrl": "https://tracker.eucharisteotrading.co.za/tracker/assets/icons/icon-maskable-512.png",
+            "appVersion": "1.0.0",
+            "appVersionCode": 1,
+            "webManifestUrl": "https://tracker.eucharisteotrading.co.za/tracker/manifest.webmanifest",
+            "fullScopeUrl": "https://tracker.eucharisteotrading.co.za/tracker/",
+            "minSdkVersion": 21,
+            "orientation": "default",
+            "fallbackType": "customtabs",
+            "isChromeOSOnly": false,
+            "isMetaQuest": false,
+            "enableSiteSettingsShortcut": true,
+            "fingerprints": [],
+            "additionalTrustedOrigins": [],
+            "retainedBundles": [],
+            "features": {},
+            "alphaDependencies": { "enabled": false },
+            "signingKey": { "path": "./android.keystore", "alias": "eucharisteo" }
+          }
+          EOF
+          cat twa-manifest.json
 
       - name: Build APK
-        working-directory: twa
         env:
-          HAVE_KS: ${{ steps.keystore.outputs.have_keystore }}
-          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          BUBBLEWRAP_KEYSTORE_PASSWORD: eucharisteo123
+          BUBBLEWRAP_KEY_PASSWORD: eucharisteo123
         run: |
-          if [ "$HAVE_KS" = "true" ]; then
-            bubblewrap build --skipPwaValidation \
-              --signingKeyPath ./android.keystore --signingKeyAlias "$KEY_ALIAS"
-          else
-            bubblewrap build --skipPwaValidation
-          fi
+          # Generate the Android project from twa-manifest.json, then build.
+          bubblewrap update --skipVersionUpgrade || true
+          bubblewrap build --skipPwaValidation
           echo "--- APK files produced ---"
           find . -iname "*.apk"
 
@@ -110,6 +107,6 @@ jobs:
         with:
           name: eucharisteo-invoice-tracker-apk
           path: |
-            twa/*.apk
-            twa/app/build/outputs/**/*.apk
+            *.apk
+            app/build/outputs/**/*.apk
           if-no-files-found: error
