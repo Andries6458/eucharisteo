@@ -219,6 +219,15 @@ table.inv .num{text-align:right;font-variant-numeric:tabular-nums;white-space:no
   padding:.6rem;font-size:.85rem;margin-bottom:1rem;display:none}
 .error-msg.show{display:block}
 
+/* ---------- attachments ---------- */
+.attach-list{display:flex;flex-direction:column;gap:.4rem;margin-top:.4rem}
+.attach-item{display:flex;align-items:center;gap:.5rem;background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--radius-sm);padding:.4rem .6rem;font-size:.85rem}
+.attach-item a{color:var(--gold);text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.attach-item a:hover{text-decoration:underline}
+.attach-item.pending{border-style:dashed;opacity:.85}
+.attach-item .row-x{margin-left:auto}
+
 /* ---------- drag & drop import ---------- */
 .drop-overlay{position:fixed;inset:0;z-index:90;display:none;align-items:center;justify-content:center;
   background:rgba(10,14,26,.82);backdrop-filter:blur(5px)}

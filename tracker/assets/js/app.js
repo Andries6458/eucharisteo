@@ -4,6 +4,7 @@
 import {
   initStore, getMode, getUser, onAuth, onInvoices, signIn, signOutUser,
   saveInvoice, deleteInvoice, replaceAll, snapshot, genId,
+  uploadAttachment, removeAttachment,
 } from './store.js';
 import {
   PARTIES, CURRENCIES, VAT_RATE, computeInvoice, summarise, buildReminders,
@@ -239,7 +240,7 @@ function renderTable() {
     const partial = i._partial ? '<span class="partial-tag">partial</span>' : '';
     tr.innerHTML =
       `<td class="nowrap">${esc(PARTIES[i.party]?.short || i.party)}</td>` +
-      `<td class="nowrap"><b>${esc(i.invoiceNumber || '—')}</b></td>` +
+      `<td class="nowrap"><b>${esc(i.invoiceNumber || '—')}</b>${(i.attachments && i.attachments.length) ? ' <span title="Has attachments">📎</span>' : ''}</td>` +
       `<td>${cts || '<span class="muted">—</span>'}</td>` +
       `<td class="nowrap">${fmtDate(i.issueDate)}</td>` +
       `<td class="nowrap">${fmtDate(i.dueDate)}</td>` +
@@ -261,7 +262,7 @@ function blankInvoice(party = 'VULCAN') {
     currency: meta.defaultCurrency, vatMode: meta.defaultVatMode,
     issueDate: todayISO(), dueDate: addDays(todayISO(), meta.defaultTermsDays ?? 30),
     items: [{ description: '', qty: 1, unitPrice: 0 }],
-    payments: [], notes: '',
+    payments: [], notes: '', attachments: [],
   };
 }
 
@@ -334,6 +335,10 @@ function openInvoiceModal(id, prefill) {
         <th style="width:30%">Date</th><th style="width:30%">Amount</th><th>Note</th><th></th>
       </tr></thead><tbody id="f-pays"></tbody></table>
       <button class="btn btn-sm" id="f-add-pay" type="button" style="margin-top:.5rem">+ Record payment</button>
+
+      <div class="subtle-head"><h4>Attachments</h4><button class="btn btn-sm" id="f-attach-btn" type="button">📎 Attach file</button></div>
+      <input type="file" id="f-attach-input" class="hidden" multiple accept=".pdf,image/*">
+      <div id="f-attach-list" class="attach-list"></div>
 
       <div class="field" style="margin-top:1.2rem"><label>Notes</label><textarea id="f-notes" placeholder="Internal notes…">${esc(draft.notes || '')}</textarea></div>
       ${existing ? `<p class="muted" style="font-size:.75rem">Created by ${esc(existing.createdBy || '—')} · last updated ${esc((existing.updatedAt || '').slice(0, 16).replace('T', ' '))} by ${esc(existing.updatedBy || '—')}</p>` : ''}
@@ -448,6 +453,41 @@ function openInvoiceModal(id, prefill) {
     draft.payments.push({ date: todayISO(), amount: 0, note: '' }); renderPays();
   });
 
+  /* ---- attachments ---- */
+  draft.attachments = draft.attachments || [];
+  draft._pendingFiles = draft._pendingFiles || [];
+  draft._deletedAtt = draft._deletedAtt || [];
+  const attList = $('#f-attach-list', modal);
+  const fileIcon = (t) => (t && t.includes('pdf') ? '📄' : t && t.startsWith('image') ? '🖼️' : '📎');
+  function renderAttachments() {
+    attList.innerHTML = '';
+    const saved = draft.attachments.map((a, i) => {
+      const href = a.url || a.dataUrl || '#';
+      return `<div class="attach-item"><span>${fileIcon(a.type)}</span>`
+        + `<a href="${esc(href)}" target="_blank" rel="noopener" download="${esc(a.name)}">${esc(a.name)}</a>`
+        + `<span class="muted" style="font-size:.72rem">${(a.size / 1024 | 0)} KB</span>`
+        + `<button type="button" class="row-x" data-rm="${i}" title="Remove">&times;</button></div>`;
+    }).join('');
+    const pend = draft._pendingFiles.map((f, i) =>
+      `<div class="attach-item pending"><span>${fileIcon(f.type)}</span>`
+      + `<span>${esc(f.name)}</span><span class="muted" style="font-size:.72rem">to upload on save</span>`
+      + `<button type="button" class="row-x" data-rmp="${i}" title="Remove">&times;</button></div>`).join('');
+    attList.innerHTML = saved + pend
+      || '<div class="muted" style="font-size:.82rem">No files attached. Add the original PDF/photo invoice here.</div>';
+  }
+  attList.addEventListener('click', (e) => {
+    const rm = e.target.dataset.rm, rmp = e.target.dataset.rmp;
+    if (rm != null) { draft._deletedAtt.push(draft.attachments[+rm]); draft.attachments.splice(+rm, 1); renderAttachments(); }
+    else if (rmp != null) { draft._pendingFiles.splice(+rmp, 1); renderAttachments(); }
+  });
+  $('#f-attach-btn', modal).addEventListener('click', () => $('#f-attach-input', modal).click());
+  $('#f-attach-input', modal).addEventListener('change', (e) => {
+    for (const f of e.target.files) draft._pendingFiles.push(f);
+    e.target.value = '';
+    renderAttachments();
+  });
+  renderAttachments();
+
   /* ---- header fields ---- */
   const entityText = (party) => {
     const p = PARTIES[party];
@@ -484,17 +524,36 @@ function openInvoiceModal(id, prefill) {
     if (act === 'pdf') return safe(() => exportInvoicePDF(draft, todayISO()), 'Invoice PDF created');
     if (act === 'delete') {
       if (!confirm('Delete this invoice permanently?')) return;
+      for (const a of (draft.attachments || [])) await removeAttachment(a);
       await deleteInvoice(draft.id); toast('Invoice deleted'); return close();
     }
     if (act === 'save') {
       draft.invoiceNumber = draft.invoiceNumber.trim();
       draft.items = draft.items.filter((it) => (it.description || '').trim() || Number(it.qty) || Number(it.unitPrice));
       if (!draft.items.length) { toast('Add at least one line item', 'err'); return; }
+      const saveBtn = e.target; saveBtn.disabled = true;
+      const pending = draft._pendingFiles || [];
+      const deleted = draft._deletedAtt || [];
+      // strip transient fields before persisting
+      delete draft._pendingFiles; delete draft._deletedAtt;
+      if (!draft.id) draft.id = genId();
       try {
+        if (pending.length) {
+          saveBtn.textContent = 'Uploading…';
+          for (const f of pending) {
+            const meta = await uploadAttachment(draft.id, f);
+            draft.attachments.push(meta);
+          }
+        }
         await saveInvoice(draft);
+        for (const a of deleted) await removeAttachment(a);
         toast(id ? 'Invoice updated' : 'Invoice created');
         close();
-      } catch (ex) { toast('Save failed: ' + (ex.message || ex), 'err'); }
+      } catch (ex) {
+        draft._pendingFiles = pending; draft._deletedAtt = deleted; // restore on failure
+        saveBtn.disabled = false; saveBtn.textContent = id ? 'Save changes' : 'Create invoice';
+        toast('Save failed: ' + (ex.message || ex), 'err');
+      }
     }
   });
 
@@ -781,8 +840,8 @@ async function importPdf(file) {
   catch (ex) { toast('Could not read PDF: ' + (ex.message || ex), 'err'); return; }
 
   if (!text || text.replace(/\s/g, '').length < 20) {
-    toast('This looks like a scanned PDF (no text to read). Opening a blank invoice — please type the details.', 'err');
-    openInvoiceModal(null, { notes: `From file: ${file.name} (scanned PDF — entered manually)` });
+    toast('This looks like a scanned PDF (no text to read). Opening a blank invoice — please type the details (the file is attached).', 'err');
+    openInvoiceModal(null, { notes: `From file: ${file.name} (scanned PDF — entered manually)`, _pendingFiles: [file] });
     return;
   }
   const p = parseInvoiceText(text);
@@ -796,6 +855,7 @@ async function importPdf(file) {
     dueDate: p.dueDate || addDays(issue, PARTIES[p.party].defaultTermsDays || 30),
     items: [{ description: `From ${file.name}`, qty: 1, unitPrice: p.amount || 0 }],
     notes: `Imported from PDF: ${file.name}`,
+    _pendingFiles: [file],
   });
   toast('Check the details read from the PDF, then Save', 'ok');
 }

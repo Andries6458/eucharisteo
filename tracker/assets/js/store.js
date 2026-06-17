@@ -149,16 +149,18 @@ async function initFirebase() {
     import(`https://www.gstatic.com/firebasejs/${FB_VER}/firebase-auth.js`),
     import(`https://www.gstatic.com/firebasejs/${FB_VER}/firebase-firestore.js`),
   ]);
+  const stMod = await import(`https://www.gstatic.com/firebasejs/${FB_VER}/firebase-storage.js`);
 
   const app = initializeApp(firebaseConfig);
   const auth = authMod.getAuth(app);
   const db = fsMod.getFirestore(app);
+  const storage = stMod.getStorage(app);
 
   // keep working offline; Firestore reconciles when back online
   try { await fsMod.enableIndexedDbPersistence(db); } catch { /* multi-tab: ignore */ }
 
   fb = {
-    app, auth, db,
+    app, auth, db, storage,
     signInWithEmailAndPassword: authMod.signInWithEmailAndPassword,
     signOut: authMod.signOut,
     doc: fsMod.doc,
@@ -166,6 +168,10 @@ async function initFirebase() {
     deleteDoc: fsMod.deleteDoc,
     collection: fsMod.collection,
     onSnapshot: fsMod.onSnapshot,
+    sRef: stMod.ref,
+    uploadBytes: stMod.uploadBytes,
+    getDownloadURL: stMod.getDownloadURL,
+    deleteObject: stMod.deleteObject,
   };
 
   let unsubData = null;
@@ -187,6 +193,47 @@ async function initFirebase() {
       emitInvoices();
     }
   });
+}
+
+/* ---------------- attachments ---------------- */
+
+const LOCAL_ATTACH_MAX = 2_000_000; // 2 MB cap for local-mode (base64) files
+
+/** Upload a file for an invoice. Returns attachment metadata to store on the doc. */
+export async function uploadAttachment(invoiceId, file) {
+  const meta = {
+    name: file.name, type: file.type || 'application/octet-stream',
+    size: file.size, uploadedAt: new Date().toISOString(),
+    uploadedBy: currentUser?.email || 'unknown',
+  };
+  if (mode === 'cloud') {
+    const safe = file.name.replace(/[^A-Za-z0-9._-]/g, '_');
+    const path = `workspaces/${WORKSPACE_ID}/invoices/${invoiceId}/${Date.now()}_${safe}`;
+    const r = fb.sRef(fb.storage, path);
+    await fb.uploadBytes(r, file, { contentType: meta.type });
+    meta.url = await fb.getDownloadURL(r);
+    meta.path = path;
+    return meta;
+  }
+  // local mode: embed as a data URL (with a size cap to protect localStorage)
+  if (file.size > LOCAL_ATTACH_MAX) {
+    throw new Error('File too large for local mode (max 2 MB). Enable cloud sync for large files.');
+  }
+  meta.dataUrl = await new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onload = () => res(fr.result);
+    fr.onerror = rej;
+    fr.readAsDataURL(file);
+  });
+  return meta;
+}
+
+/** Delete a stored attachment (cloud only; local is just dropped from the doc). */
+export async function removeAttachment(att) {
+  if (mode === 'cloud' && att && att.path) {
+    try { await fb.deleteObject(fb.sRef(fb.storage, att.path)); }
+    catch (e) { console.warn('Attachment delete failed (continuing):', e); }
+  }
 }
 
 /* ---------------- helpers ---------------- */

@@ -56,8 +56,20 @@ This uses **Firebase** (Google). The free "Spark" plan is far more than enough.
      }
    }
    ```
-4. **Project settings (⚙) → Your apps → Web app (`</>`) → register an app →** copy the `firebaseConfig` values.
-5. Open **`tracker/assets/js/config.js`** and replace the `PASTE_…` placeholders with those values. Save and re-deploy.
+4. **Storage → Get started** (needed for invoice file attachments). Then open the **Rules** tab, paste the rules below, and **Publish**:
+
+   ```
+   rules_version = '2';
+   service firebase.storage {
+     match /b/{bucket}/o {
+       match /workspaces/{ws}/invoices/{allPaths=**} {
+         allow read, write: if request.auth != null;
+       }
+     }
+   }
+   ```
+5. **Project settings (⚙) → Your apps → Web app (`</>`) → register an app →** copy the `firebaseConfig` values.
+6. Open **`tracker/assets/js/config.js`** and replace the `PASTE_…` placeholders with those values. Save and re-deploy.
 
 Done. Now everyone signs in with their email/password and sees the same live invoices and reminders, updating in real time. (It still works offline and syncs when back online.)
 
