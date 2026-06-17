@@ -219,6 +219,16 @@ table.inv .num{text-align:right;font-variant-numeric:tabular-nums;white-space:no
   padding:.6rem;font-size:.85rem;margin-bottom:1rem;display:none}
 .error-msg.show{display:block}
 
+/* ---------- drag & drop import ---------- */
+.drop-overlay{position:fixed;inset:0;z-index:90;display:none;align-items:center;justify-content:center;
+  background:rgba(10,14,26,.82);backdrop-filter:blur(5px)}
+.drop-overlay.show{display:flex}
+.drop-card{border:2px dashed var(--gold);border-radius:var(--radius);padding:2.6rem 3.4rem;text-align:center;
+  background:var(--surface);box-shadow:var(--shadow);pointer-events:none}
+.drop-card .drop-ico{font-size:2.4rem;color:var(--gold);margin-bottom:.4rem}
+.drop-card h3{font-family:var(--font-serif);font-size:1.7rem;color:var(--gold);font-weight:600}
+.drop-card p{color:var(--muted);font-size:.9rem;margin-top:.2rem}
+
 /* ---------- toast ---------- */
 .toast-host{position:fixed;bottom:1.2rem;left:50%;transform:translateX(-50%);z-index:80;
   display:flex;flex-direction:column;gap:.5rem;align-items:center}

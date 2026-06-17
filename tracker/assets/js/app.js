@@ -11,7 +11,7 @@ import {
   STATUS_LABEL, subtotalOf, paidOf,
 } from './calc.js';
 import {
-  exportExcel, exportPDF, exportInvoicePDF, parseTable,
+  exportExcel, exportPDF, exportInvoicePDF, parseTable, readSpreadsheet,
 } from './export.js';
 import { APP, ENTITIES, isFirebaseConfigured } from './config.js';
 
@@ -118,6 +118,7 @@ function wireChrome() {
   $('#bell').addEventListener('click', () => $('#reminders-panel').scrollIntoView({ behavior: 'smooth' }));
   $('#notify-toggle').addEventListener('click', requestNotifications);
 
+  setupDragDrop();
   updateNotifyButton();
 }
 
@@ -529,7 +530,7 @@ function openPasteModal() {
   modal.innerHTML = `
     <div class="modal-head"><h2>Paste invoices</h2><button class="close-x" data-x>&times;</button></div>
     <div class="modal-body">
-      <p class="muted" style="margin-bottom:.8rem">Copy rows from Excel / your Windows PC and paste below. Each row becomes one invoice.</p>
+      <p class="muted" style="margin-bottom:.8rem">Copy rows from Excel / your Windows PC and paste below — or just <b>drag an Excel/CSV/JSON file anywhere onto the app</b>. Each row becomes one invoice.</p>
       <p class="muted" style="font-size:.82rem;margin-bottom:.6rem">Columns, in order (tab or comma separated):<br>
       <b>Party</b> (Vulcan/AMSA) · <b>Invoice No</b> · <b>CT Numbers</b> (space-separated) · <b>Issue date</b> (YYYY-MM-DD) · <b>Due date</b> · <b>Description</b> · <b>Qty</b> · <b>Unit price</b> · <b>Currency</b> (optional)</p>
       <div class="field"><textarea id="paste-area" style="min-height:180px;font-family:monospace;font-size:.82rem" placeholder="Vulcan&#9;INV-001&#9;CT100 CT101&#9;2026-05-01&#9;2026-05-31&#9;Coking coal&#9;1500&#9;142.50&#9;USD"></textarea></div>
@@ -562,27 +563,208 @@ function openPasteModal() {
   });
 }
 
-function rowsToInvoices(rows) {
-  const out = [];
-  for (const r of rows) {
-    if (!r.length || r.every((c) => !c)) continue;
-    if (/^party$/i.test(r[0]) || /invoice\s*no/i.test(r[1] || '')) continue; // header
-    const party = /amsa/i.test(r[0] || '') ? 'AMSA' : 'VULCAN';
-    const meta = PARTIES[party];
-    const ct = (r[2] || '').split(/[ ,;]+/).map((s) => s.trim()).filter(Boolean);
-    out.push({
-      id: genId(), party,
-      invoiceNumber: r[1] || '',
-      ctNumbers: ct,
-      issueDate: normDate(r[3]) || todayISO(),
-      dueDate: normDate(r[4]) || addDays(normDate(r[3]) || todayISO(), 30),
-      items: [{ description: r[5] || 'Item', qty: parseNum(r[6]) || 1, unitPrice: parseNum(r[7]) || 0 }],
-      currency: (r[8] || meta.defaultCurrency).toUpperCase().trim() || meta.defaultCurrency,
-      vatMode: meta.defaultVatMode,
-      payments: [], notes: '',
+/* Header keywords used to auto-detect columns from an existing spreadsheet. */
+const HEADER_SYNONYMS = {
+  party: ['party', 'client', 'customer', 'company', 'account', 'debtor', 'supplier', 'entity'],
+  invoiceNumber: ['invoice no', 'invoice number', 'invoice #', 'invoice', 'inv no', 'invno', 'inv', 'reference', 'ref', 'document', 'doc no'],
+  ct: ['ct numbers', 'ct number', 'ct no', 'ct nos', 'ct', 'consignment'],
+  issueDate: ['issue date', 'invoice date', 'date', 'dated', 'doc date'],
+  dueDate: ['due date', 'payment due', 'due by', 'due'],
+  description: ['description', 'details', 'particulars', 'narration', 'item', 'desc', 'product'],
+  qty: ['quantity', 'tonnage', 'tonnes', 'tons', 'qty', 'volume', 'weight', 'units'],
+  unitPrice: ['unit price', 'unitprice', 'unit cost', 'price per', 'unit rate', 'rate', 'price'],
+  amount: ['invoice total', 'grand total', 'line total', 'amount due', 'total', 'amount', 'value', 'net'],
+  currency: ['currency', 'ccy', 'curr', 'cur'],
+  paid: ['amount paid', 'paid', 'received', 'settled', 'payment'],
+  notes: ['notes', 'note', 'comments', 'comment', 'remarks', 'remark'],
+};
+
+function normHead(s) {
+  return String(s || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/** Map a header row to column indexes. Returns null if it doesn't look like a header. */
+function detectHeaderMap(headerRow) {
+  const map = {}; const used = new Set(); let matches = 0;
+  const pass = (exact) => {
+    headerRow.forEach((cell, i) => {
+      if (used.has(i)) return;
+      const n = normHead(cell);
+      if (!n) return;
+      for (const [field, syns] of Object.entries(HEADER_SYNONYMS)) {
+        if (map[field] != null) continue;
+        const hit = exact ? syns.includes(n) : syns.some((s) => n.includes(s));
+        if (hit) { map[field] = i; used.add(i); matches++; break; }
+      }
     });
+  };
+  pass(true); pass(false);
+  return matches >= 2 ? map : null;
+}
+
+const cellOf = (r, m, f) => (m[f] != null ? (r[m[f]] ?? '') : '');
+
+function partyFrom(raw, currency) {
+  if (/amsa/i.test(raw)) return 'AMSA';
+  if (/vulcan/i.test(raw)) return 'VULCAN';
+  const c = String(currency || '').toUpperCase();
+  if (c === 'ZAR' || c === 'R') return 'AMSA';
+  return 'VULCAN';
+}
+
+function invoiceFromHeaderRow(r, m) {
+  const currencyRaw = String(cellOf(r, m, 'currency')).toUpperCase().trim();
+  const party = partyFrom(cellOf(r, m, 'party'), currencyRaw);
+  const meta = PARTIES[party];
+  const invoiceNumber = String(cellOf(r, m, 'invoiceNumber')).trim();
+  const qty = m.qty != null ? parseNum(cellOf(r, m, 'qty')) : null;
+  const unitPrice = m.unitPrice != null ? parseNum(cellOf(r, m, 'unitPrice')) : null;
+  const amount = m.amount != null ? parseNum(cellOf(r, m, 'amount')) : null;
+  if (!invoiceNumber && !amount && !unitPrice) return null; // empty row
+
+  let items;
+  if (unitPrice) {
+    items = [{ description: String(cellOf(r, m, 'description')) || 'Item', qty: qty || 1, unitPrice }];
+  } else {
+    items = [{ description: String(cellOf(r, m, 'description')) || 'Invoice amount', qty: 1, unitPrice: amount || 0 }];
+  }
+  const issueDate = normDate(cellOf(r, m, 'issueDate')) || todayISO();
+  const dueDate = normDate(cellOf(r, m, 'dueDate')) || addDays(issueDate, meta.defaultTermsDays || 30);
+  const ct = String(cellOf(r, m, 'ct')).split(/[ ,;]+/).map((s) => s.trim()).filter(Boolean);
+  const paid = m.paid != null ? parseNum(cellOf(r, m, 'paid')) : 0;
+  return {
+    id: genId(), party, invoiceNumber, ctNumbers: ct, issueDate, dueDate, items,
+    currency: currencyRaw || meta.defaultCurrency,
+    vatMode: meta.defaultVatMode,
+    payments: paid > 0 ? [{ date: issueDate, amount: paid, note: 'opening balance' }] : [],
+    notes: String(cellOf(r, m, 'notes') || ''),
+  };
+}
+
+function invoiceFromPositionalRow(r) {
+  if (/^party$/i.test(r[0]) || /invoice\s*no/i.test(r[1] || '')) return null; // stray header
+  const party = /amsa/i.test(r[0] || '') ? 'AMSA' : 'VULCAN';
+  const meta = PARTIES[party];
+  const ct = (r[2] || '').split(/[ ,;]+/).map((s) => s.trim()).filter(Boolean);
+  const issueDate = normDate(r[3]) || todayISO();
+  if (!String(r[1] || '').trim() && !parseNum(r[6]) && !parseNum(r[7])) return null;
+  return {
+    id: genId(), party,
+    invoiceNumber: String(r[1] || '').trim(), ctNumbers: ct,
+    issueDate, dueDate: normDate(r[4]) || addDays(issueDate, meta.defaultTermsDays || 30),
+    items: [{ description: r[5] || 'Item', qty: parseNum(r[6]) || 1, unitPrice: parseNum(r[7]) || 0 }],
+    currency: String(r[8] || meta.defaultCurrency).toUpperCase().trim() || meta.defaultCurrency,
+    vatMode: meta.defaultVatMode, payments: [], notes: '',
+  };
+}
+
+/** Turn rows (from paste OR a spreadsheet file) into invoices, header-aware. */
+function rowsToInvoices(rows) {
+  if (!rows || !rows.length) return [];
+  const hmap = detectHeaderMap(rows[0] || []);
+  const dataRows = hmap ? rows.slice(1) : rows;
+  const out = [];
+  for (const r of dataRows) {
+    if (!r.length || r.every((c) => !String(c).trim())) continue;
+    const inv = hmap ? invoiceFromHeaderRow(r, hmap) : invoiceFromPositionalRow(r);
+    if (inv) out.push(inv);
   }
   return out;
+}
+
+/* ============================ drag & drop import ============================ */
+function dragHasFiles(e) {
+  return e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+}
+
+function setupDragDrop() {
+  if ($('#drop-overlay')) return;
+  const ov = el('div', 'drop-overlay');
+  ov.id = 'drop-overlay';
+  ov.innerHTML = '<div class="drop-card"><div class="drop-ico">⬇</div>'
+    + '<h3>Drop to import invoices</h3>'
+    + '<p>Excel (.xlsx), CSV, or JSON backup</p></div>';
+  document.body.appendChild(ov);
+
+  let depth = 0;
+  window.addEventListener('dragenter', (e) => {
+    if (!getUser() || !dragHasFiles(e)) return;
+    e.preventDefault(); depth++; ov.classList.add('show');
+  });
+  window.addEventListener('dragover', (e) => { if (dragHasFiles(e)) e.preventDefault(); });
+  window.addEventListener('dragleave', () => { depth--; if (depth <= 0) { depth = 0; ov.classList.remove('show'); } });
+  window.addEventListener('drop', (e) => {
+    if (!dragHasFiles(e)) return;
+    e.preventDefault(); depth = 0; ov.classList.remove('show');
+    if (!getUser()) return;
+    const files = e.dataTransfer.files;
+    if (files && files.length) handleDroppedFiles(files);
+  });
+}
+
+async function handleDroppedFiles(files) {
+  const file = files[0];
+  const name = (file.name || '').toLowerCase();
+  try {
+    if (name.endsWith('.json')) {
+      const parsed = JSON.parse(await file.text());
+      const invoices = Array.isArray(parsed) ? parsed : parsed.invoices;
+      if (!Array.isArray(invoices)) throw new Error('Not a recognised backup file');
+      confirmImport(invoices.map((i) => ({ ...i, id: i.id || genId() })), file.name);
+    } else if (/\.(xlsx|xls|csv)$/.test(name)) {
+      const rows = await readSpreadsheet(file);
+      const invoices = rowsToInvoices(rows);
+      if (!invoices.length) { toast(`No invoices detected in ${file.name}`, 'err'); return; }
+      confirmImport(invoices, file.name);
+    } else {
+      toast('Please drop an .xlsx, .csv or .json file', 'err');
+    }
+  } catch (ex) {
+    console.error(ex);
+    toast('Could not read that file: ' + (ex.message || ex), 'err');
+  }
+}
+
+function confirmImport(invoices, filename) {
+  const host = $('#modal-host');
+  host.innerHTML = '';
+  const overlay = el('div', 'modal-overlay');
+  const modal = el('div', 'modal'); modal.style.maxWidth = '720px';
+  overlay.appendChild(modal); host.appendChild(overlay);
+  overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) host.innerHTML = ''; });
+
+  const rowsHtml = invoices.slice(0, 8).map((raw) => {
+    const i = computeInvoice(raw, todayISO());
+    return `<tr><td>${esc(PARTIES[i.party]?.short || i.party)}</td>`
+      + `<td>${esc(i.invoiceNumber || '—')}</td>`
+      + `<td class="nowrap">${esc(fmtDate(i.issueDate))}</td>`
+      + `<td class="num">${esc(fmtMoney(i._total, i.currency))}</td></tr>`;
+  }).join('');
+
+  modal.innerHTML = `
+    <div class="modal-head"><h2>Import invoices</h2><button class="close-x" data-x>&times;</button></div>
+    <div class="modal-body">
+      <p class="muted" style="margin-bottom:.6rem">From <b>${esc(filename)}</b> — found <b>${invoices.length}</b> invoice${invoices.length === 1 ? '' : 's'}. Preview:</p>
+      <div class="table-wrap"><table class="inv"><thead><tr><th>Party</th><th>Invoice</th><th>Issued</th><th class="num">Total</th></tr></thead><tbody>${rowsHtml}</tbody></table></div>
+      ${invoices.length > 8 ? `<p class="muted" style="font-size:.8rem;margin-top:.5rem">…and ${invoices.length - 8} more.</p>` : ''}
+      <p class="muted" style="font-size:.78rem;margin-top:.7rem">Tip: a header row with columns like <b>Party, Invoice No, Issue date, Due date, Description, Qty, Unit price, Amount, Currency, Paid</b> is auto-detected (order doesn't matter). Check the party/currency look right before importing.</p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" data-x>Cancel</button>
+      <button class="btn btn-primary" id="do-import">Import ${invoices.length}</button>
+    </div>`;
+
+  modal.addEventListener('click', async (e) => {
+    if (e.target.hasAttribute('data-x')) return host.innerHTML = '';
+    if (e.target.id === 'do-import') {
+      e.target.disabled = true;
+      try {
+        for (const inv of invoices) await saveInvoice(inv);
+        toast(`${invoices.length} invoice${invoices.length === 1 ? '' : 's'} imported`);
+        host.innerHTML = '';
+      } catch (ex) { toast('Import failed: ' + (ex.message || ex), 'err'); e.target.disabled = false; }
+    }
+  });
 }
 
 /* ============================ menu / backup ============================ */

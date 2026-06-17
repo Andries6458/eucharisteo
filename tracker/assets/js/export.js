@@ -285,6 +285,24 @@ export async function exportInvoicePDF(rawInvoice, refISO) {
 /* ------------------------------------------------- clipboard / paste parse */
 
 /**
+ * Read a dropped/selected spreadsheet file (.xlsx/.xls/.csv) into an array of
+ * row arrays — same shape parseTable() returns, so the importer is shared.
+ */
+export async function readSpreadsheet(file) {
+  const name = (file.name || '').toLowerCase();
+  if (name.endsWith('.csv')) {
+    return parseTable(await file.text());
+  }
+  await loadScript(CDN.xlsx);
+  const XLSX = window.XLSX;
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: 'array' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: '' })
+    .map((row) => row.map((c) => (c == null ? '' : String(c).trim())));
+}
+
+/**
  * Parse pasted spreadsheet text (TSV from Excel, or CSV). Returns array of
  * arrays. Handles quoted CSV cells.
  */
