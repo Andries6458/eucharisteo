@@ -538,15 +538,20 @@ function openInvoiceModal(id, prefill) {
       delete draft._pendingFiles; delete draft._deletedAtt;
       if (!draft.id) draft.id = genId();
       try {
+        await saveInvoice(draft);                 // save the invoice itself first
+        for (const a of deleted) await removeAttachment(a);
         if (pending.length) {
           saveBtn.textContent = 'Uploading…';
+          let uploaded = 0;
           for (const f of pending) {
-            const meta = await uploadAttachment(draft.id, f);
-            draft.attachments.push(meta);
+            try { draft.attachments.push(await uploadAttachment(draft.id, f)); uploaded++; }
+            catch (ue) {
+              console.error(ue);
+              toast(`Invoice saved, but "${f.name}" didn't upload — enable Firebase Storage (see README).`, 'err');
+            }
           }
+          if (uploaded) await saveInvoice(draft);  // persist attachment metadata
         }
-        await saveInvoice(draft);
-        for (const a of deleted) await removeAttachment(a);
         toast(id ? 'Invoice updated' : 'Invoice created');
         close();
       } catch (ex) {
