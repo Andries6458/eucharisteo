@@ -1,5 +1,5 @@
 /* Eucharisteo Invoice Tracker — service worker (offline + installability) */
-const CACHE = 'eucharisteo-tracker-v5';
+const CACHE = 'eucharisteo-tracker-v6';
 const ASSETS = [
   './',
   './index.html',
@@ -30,23 +30,26 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  // never cache Firestore/Auth API traffic — must hit the network live
-  if (/firebaseio|googleapis|firebase|identitytoolkit|firestore/.test(url.hostname)) return;
+  // never cache Firebase Auth/Firestore/Storage API traffic — must be live
+  if (/googleapis|firebaseio|identitytoolkit|firestore|firebasestorage/.test(url.hostname)) return;
 
-  // network-first for our own HTML so updates show up
-  if (req.mode === 'navigate') {
-    e.respondWith(fetch(req).then((r) => {
-      const copy = r.clone();
-      caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
-      return r;
-    }).catch(() => caches.match('./index.html')));
+  // our own app code/shell: NETWORK-FIRST so new deploys show up immediately,
+  // falling back to cache when offline (no more manual cache-busting needed).
+  if (url.origin === location.origin) {
+    e.respondWith(
+      fetch(req).then((r) => {
+        const copy = r.clone();
+        caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+        return r;
+      }).catch(() => caches.match(req).then((hit) => hit || caches.match('./index.html')))
+    );
     return;
   }
 
-  // cache-first for everything else (assets + CDN libs/fonts) with runtime fill
+  // third-party libraries / fonts (versioned URLs): cache-first
   e.respondWith(
     caches.match(req).then((hit) => hit || fetch(req).then((r) => {
-      if (r.ok && (url.origin === location.origin || /gstatic|sheetjs|cloudflare|jsdelivr/.test(url.hostname))) {
+      if (r.ok && /gstatic|sheetjs|cloudflare|jsdelivr/.test(url.hostname)) {
         const copy = r.clone();
         caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
       }
