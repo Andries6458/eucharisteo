@@ -13,6 +13,8 @@ const CDN = {
   xlsx: 'https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js',
   jspdf: 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
   autotable: 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js',
+  pdfjs: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
+  pdfworker: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
 };
 
 function loadScript(src) {
@@ -300,6 +302,22 @@ export async function readSpreadsheet(file) {
   const ws = wb.Sheets[wb.SheetNames[0]];
   return XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: '' })
     .map((row) => row.map((c) => (c == null ? '' : String(c).trim())));
+}
+
+/** Extract the text layer from a PDF (returns '' for scanned/image-only PDFs). */
+export async function readPdfText(file) {
+  await loadScript(CDN.pdfjs);
+  const pdfjsLib = window.pdfjsLib || window['pdfjs-dist/build/pdf'];
+  pdfjsLib.GlobalWorkerOptions.workerSrc = CDN.pdfworker;
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  let text = '';
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    text += content.items.map((it) => it.str).join(' ') + '\n';
+  }
+  return text;
 }
 
 /**

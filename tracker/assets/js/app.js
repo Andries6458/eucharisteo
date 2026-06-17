@@ -11,7 +11,7 @@ import {
   STATUS_LABEL, subtotalOf, paidOf,
 } from './calc.js';
 import {
-  exportExcel, exportPDF, exportInvoicePDF, parseTable, readSpreadsheet,
+  exportExcel, exportPDF, exportInvoicePDF, parseTable, readSpreadsheet, readPdfText,
 } from './export.js';
 import { APP, ENTITIES, isFirebaseConfigured } from './config.js';
 
@@ -265,10 +265,14 @@ function blankInvoice(party = 'VULCAN') {
   };
 }
 
-function openInvoiceModal(id) {
+function openInvoiceModal(id, prefill) {
   const existing = id ? state.invoices.find((i) => i.id === id) : null;
   // deep clone so edits aren't applied until Save
-  const draft = existing ? JSON.parse(JSON.stringify(existing)) : blankInvoice();
+  const draft = existing ? JSON.parse(JSON.stringify(existing)) : blankInvoice(prefill?.party || 'VULCAN');
+  if (prefill && !existing) {
+    Object.assign(draft, prefill);
+    draft.vatMode = PARTIES[draft.party]?.defaultVatMode || draft.vatMode;
+  }
   if (!draft.items?.length) draft.items = [{ description: '', qty: 1, unitPrice: 0 }];
 
   const host = $('#modal-host');
@@ -683,7 +687,7 @@ function setupDragDrop() {
   ov.id = 'drop-overlay';
   ov.innerHTML = '<div class="drop-card"><div class="drop-ico">⬇</div>'
     + '<h3>Drop to import invoices</h3>'
-    + '<p>Excel (.xlsx), CSV, or JSON backup</p></div>';
+    + '<p>Excel (.xlsx), CSV, PDF, or JSON backup</p></div>';
   document.body.appendChild(ov);
 
   let depth = 0;
@@ -716,8 +720,10 @@ async function handleDroppedFiles(files) {
       const invoices = rowsToInvoices(rows);
       if (!invoices.length) { toast(`No invoices detected in ${file.name}`, 'err'); return; }
       confirmImport(invoices, file.name);
+    } else if (name.endsWith('.pdf')) {
+      await importPdf(file);
     } else {
-      toast('Please drop an .xlsx, .csv or .json file', 'err');
+      toast('Please drop an .xlsx, .csv, .pdf or .json file', 'err');
     }
   } catch (ex) {
     console.error(ex);
@@ -765,6 +771,73 @@ function confirmImport(invoices, filename) {
       } catch (ex) { toast('Import failed: ' + (ex.message || ex), 'err'); e.target.disabled = false; }
     }
   });
+}
+
+/* ---- PDF: read the text layer, guess the fields, open a pre-filled invoice ---- */
+async function importPdf(file) {
+  toast('Reading PDF…');
+  let text = '';
+  try { text = await readPdfText(file); }
+  catch (ex) { toast('Could not read PDF: ' + (ex.message || ex), 'err'); return; }
+
+  if (!text || text.replace(/\s/g, '').length < 20) {
+    toast('This looks like a scanned PDF (no text to read). Opening a blank invoice — please type the details.', 'err');
+    openInvoiceModal(null, { notes: `From file: ${file.name} (scanned PDF — entered manually)` });
+    return;
+  }
+  const p = parseInvoiceText(text);
+  const issue = p.issueDate || todayISO();
+  openInvoiceModal(null, {
+    party: p.party,
+    currency: p.currency,
+    invoiceNumber: p.invoiceNumber,
+    ctNumbers: p.ctNumbers,
+    issueDate: issue,
+    dueDate: p.dueDate || addDays(issue, PARTIES[p.party].defaultTermsDays || 30),
+    items: [{ description: `From ${file.name}`, qty: 1, unitPrice: p.amount || 0 }],
+    notes: `Imported from PDF: ${file.name}`,
+  });
+  toast('Check the details read from the PDF, then Save', 'ok');
+}
+
+function parseInvoiceText(text) {
+  const flat = text.replace(/ /g, ' ').replace(/\s+/g, ' ').trim();
+
+  let party = /amsa|arcelor\s*mittal/i.test(flat) ? 'AMSA'
+    : /vulcan/i.test(flat) ? 'VULCAN' : null;
+  let currency = /\bUSD\b|US\$/.test(flat) ? 'USD'
+    : /\bZAR\b|\bR\s?\d/.test(flat) ? 'ZAR'
+    : /\bMZN\b|\bMT\b/.test(flat) ? 'MZN'
+    : /\$/.test(flat) ? 'USD' : null;
+  if (!party) party = currency === 'ZAR' ? 'AMSA' : 'VULCAN';
+  if (!currency) currency = PARTIES[party].defaultCurrency;
+
+  let invoiceNumber = '';
+  const cand = flat.match(/invoice\s*(?:no\.?|number|num|#)\s*[:#.]?\s*([A-Za-z0-9][A-Za-z0-9\-\/]{2,})/i)
+    || flat.match(/\b(INV[-\/]?\d[A-Za-z0-9\-\/]*)\b/i);
+  if (cand && /\d/.test(cand[1]) && !/^(invoice|no|number|tax|date)$/i.test(cand[1])) {
+    invoiceNumber = cand[1].replace(/[.,;]$/, '');
+  }
+
+  const dateRe = /\b(\d{4}[\/.\-]\d{1,2}[\/.\-]\d{1,2}|\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})\b/g;
+  const dates = (flat.match(dateRe) || []).map((d) => normDate(d)).filter(Boolean);
+  const issueDate = dates[0] || '';
+  let dueDate = '';
+  const dm = flat.match(/due\s*(?:date)?\s*[:#]?\s*(\d{4}[\/.\-]\d{1,2}[\/.\-]\d{1,2}|\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})/i);
+  if (dm) dueDate = normDate(dm[1]);
+
+  const ctNumbers = [...new Set((flat.match(/CT\s*-?\s*\d{2,}/gi) || []).map((s) => s.replace(/\s+/g, '').toUpperCase()))];
+
+  // total: prefer a money figure next to a "total"-type label, else the largest
+  let amount = 0;
+  const re = /(grand total|total due|amount due|balance due|total|amount)\D{0,18}([0-9][0-9 ,]*\.\d{2})/ig;
+  let m;
+  while ((m = re.exec(flat))) { const v = parseFloat(m[2].replace(/[ ,]/g, '')); if (v > amount) amount = v; }
+  if (!amount) {
+    const nums = (flat.match(/[0-9][0-9 ,]*\.\d{2}/g) || []).map((s) => parseFloat(s.replace(/[ ,]/g, '')));
+    if (nums.length) amount = Math.max(...nums);
+  }
+  return { party, currency, invoiceNumber, issueDate, dueDate, ctNumbers, amount };
 }
 
 /* ============================ menu / backup ============================ */
@@ -905,6 +978,8 @@ function normDate(v) {
   if (!v) return '';
   const s = String(v).trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const y4 = s.match(/^(\d{4})[\/.\-](\d{1,2})[\/.\-](\d{1,2})$/); // yyyy/mm/dd
+  if (y4) { const [, y, mo, d] = y4; return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`; }
   const m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/); // dd/mm/yyyy
   if (m) {
     let [, d, mo, y] = m; if (y.length === 2) y = '20' + y;
