@@ -12,6 +12,7 @@ export const PARTIES = {
     direction: 'RECEIVABLE',
     defaultCurrency: 'USD',
     defaultVatMode: 'NONE',
+    vatRate: 0.16, // Mozambique IVA (16%) when VAT applies
     defaultTermsDays: 30,
     /* Eucharisteo's entity for this relationship: the Mozambique company */
     selfEntityKey: 'ECT_LDA',
@@ -25,6 +26,7 @@ export const PARTIES = {
     direction: 'PAYABLE',
     defaultCurrency: 'ZAR',
     defaultVatMode: 'INCLUSIVE',
+    vatRate: 0.15, // South African VAT (15%)
     defaultTermsDays: 30,
     /* Eucharisteo's entity for this relationship: the South African company */
     selfEntityKey: 'EUCHARISTEO_SA',
@@ -119,17 +121,18 @@ export function paidOf(payments = []) {
 export function computeInvoice(inv, refISO = todayISO()) {
   const items = inv.items || [];
   const vatMode = inv.vatMode || 'NONE';
+  const rate = inv.vatRate != null ? inv.vatRate : (PARTIES[inv.party]?.vatRate ?? VAT_RATE);
   const sub = subtotalOf(items);
 
   let net, vat, total;
   if (vatMode === 'INCLUSIVE') {
-    // entered amounts already include VAT (AMSA)
+    // entered amounts already include VAT
     total = sub;
-    net = round2(sub / (1 + VAT_RATE));
+    net = round2(sub / (1 + rate));
     vat = round2(total - net);
   } else if (vatMode === 'EXCLUSIVE') {
     net = sub;
-    vat = round2(sub * VAT_RATE);
+    vat = round2(sub * rate);
     total = round2(net + vat);
   } else {
     // NONE (Vulcan — USD, no VAT)
@@ -166,6 +169,7 @@ export function computeInvoice(inv, refISO = todayISO()) {
     _subtotal: sub,
     _net: net,
     _vat: vat,
+    _vatRate: rate,
     _total: total,
     _paid: paid,
     _balance: balance,

@@ -410,7 +410,7 @@ function blankInvoice(party = 'VULCAN') {
   return {
     id: null, party,
     invoiceNumber: '', ctNumbers: [],
-    currency: meta.defaultCurrency, vatMode: meta.defaultVatMode,
+    currency: meta.defaultCurrency, vatMode: meta.defaultVatMode, vatRate: meta.vatRate,
     issueDate: todayISO(), dueDate: addDays(todayISO(), meta.defaultTermsDays ?? 30),
     items: [{ description: '', qty: 1, unitPrice: 0 }],
     payments: [], notes: '', attachments: [],
@@ -423,7 +423,8 @@ function openInvoiceModal(id, prefill) {
   const draft = existing ? JSON.parse(JSON.stringify(existing)) : blankInvoice(prefill?.party || 'VULCAN');
   if (prefill && !existing) {
     Object.assign(draft, prefill);
-    draft.vatMode = PARTIES[draft.party]?.defaultVatMode || draft.vatMode;
+    if (!prefill.vatMode) draft.vatMode = PARTIES[draft.party]?.defaultVatMode || draft.vatMode;
+    if (draft.vatRate == null) draft.vatRate = PARTIES[draft.party]?.vatRate;
   }
   if (!draft.items?.length) draft.items = [{ description: '', qty: 1, unitPrice: 0 }];
 
@@ -440,8 +441,10 @@ function openInvoiceModal(id, prefill) {
     .map((c) => `<option value="${c}" ${draft.currency === c ? 'selected' : ''}>${c}</option>`).join('');
   const partyOptions = Object.values(PARTIES)
     .map((p) => `<option value="${p.key}" ${draft.party === p.key ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
-  const vatOptions = [['NONE', 'No VAT'], ['INCLUSIVE', 'VAT included (15%)'], ['EXCLUSIVE', 'Add VAT (15%)']]
+  const vatPct = () => Math.round((draft.vatRate != null ? draft.vatRate : (PARTIES[draft.party]?.vatRate ?? 0.15)) * 100);
+  const vatOptionsHtml = () => [['NONE', 'No VAT'], ['INCLUSIVE', `VAT included (${vatPct()}%)`], ['EXCLUSIVE', `Add VAT (${vatPct()}%)`]]
     .map(([v, l]) => `<option value="${v}" ${draft.vatMode === v ? 'selected' : ''}>${l}</option>`).join('');
+  const vatOptions = vatOptionsHtml();
 
   modal.innerHTML = `
     <div class="modal-head">
@@ -570,7 +573,7 @@ function openInvoiceModal(id, prefill) {
     $('#f-totals', modal).innerHTML =
       `<div class="metric-row"><span class="lbl">Subtotal</span><span class="val">${esc(fmtMoney(c._subtotal, draft.currency))}</span></div>` +
       (c._vat ? `<div class="metric-row"><span class="lbl">Net</span><span class="val">${esc(fmtMoney(c._net, draft.currency))}</span></div>
-                 <div class="metric-row"><span class="lbl">VAT (15%)</span><span class="val">${esc(fmtMoney(c._vat, draft.currency))}</span></div>` : '') +
+                 <div class="metric-row"><span class="lbl">VAT (${Math.round((c._vatRate || 0) * 100)}%)</span><span class="val">${esc(fmtMoney(c._vat, draft.currency))}</span></div>` : '') +
       `<div class="metric-row grand"><span class="lbl">Invoice total</span><span class="val">${esc(fmtMoney(c._total, draft.currency))}</span></div>` +
       `<div class="metric-row"><span class="lbl">Paid</span><span class="val paid">${esc(fmtMoney(c._paid, draft.currency))}</span></div>` +
       `<div class="metric-row"><span class="lbl">Balance</span><span class="val out">${esc(fmtMoney(c._balance, draft.currency))}</span></div>`;
@@ -647,7 +650,12 @@ function openInvoiceModal(id, prefill) {
       : `🧾 ${p.name} → invoices ${p.selfEntityName}`;
   };
   const setEntityNote = () => { $('#f-entity-note', modal).textContent = entityText(draft.party); };
-  $('#f-party', modal).addEventListener('change', (e) => { draft.party = e.target.value; setEntityNote(); });
+  $('#f-party', modal).addEventListener('change', (e) => {
+    draft.party = e.target.value;
+    draft.vatRate = PARTIES[draft.party]?.vatRate; // 16% Vulcan / 15% AMSA
+    $('#f-vat', modal).innerHTML = vatOptionsHtml();
+    setEntityNote(); renderTotals();
+  });
   setEntityNote();
   $('#f-num', modal).addEventListener('input', (e) => { draft.invoiceNumber = e.target.value; });
   $('#f-cur', modal).addEventListener('change', (e) => { draft.currency = e.target.value; renderItems(); renderPays(); });
@@ -662,9 +670,9 @@ function openInvoiceModal(id, prefill) {
   }));
   $('#f-apply-defaults', modal).addEventListener('click', () => {
     const m = PARTIES[draft.party];
-    draft.currency = m.defaultCurrency; draft.vatMode = m.defaultVatMode;
+    draft.currency = m.defaultCurrency; draft.vatMode = m.defaultVatMode; draft.vatRate = m.vatRate;
     $('#f-cur', modal).value = m.defaultCurrency;
-    $('#f-vat', modal).value = m.defaultVatMode;
+    $('#f-vat', modal).innerHTML = vatOptionsHtml();
     renderItems(); renderPays();
   });
 
@@ -854,7 +862,7 @@ function invoiceFromHeaderRow(r, m) {
   return {
     id: genId(), party, invoiceNumber, ctNumbers: ct, issueDate, dueDate, items,
     currency: currencyRaw || meta.defaultCurrency,
-    vatMode: meta.defaultVatMode,
+    vatMode: meta.defaultVatMode, vatRate: meta.vatRate,
     payments: paid > 0 ? [{ date: issueDate, amount: paid, note: 'opening balance' }] : [],
     notes: String(cellOf(r, m, 'notes') || ''),
   };
@@ -873,7 +881,7 @@ function invoiceFromPositionalRow(r) {
     issueDate, dueDate: normDate(r[4]) || addDays(issueDate, meta.defaultTermsDays || 30),
     items: [{ description: r[5] || 'Item', qty: parseNum(r[6]) || 1, unitPrice: parseNum(r[7]) || 0 }],
     currency: String(r[8] || meta.defaultCurrency).toUpperCase().trim() || meta.defaultCurrency,
-    vatMode: meta.defaultVatMode, payments: [], notes: '',
+    vatMode: meta.defaultVatMode, vatRate: meta.vatRate, payments: [], notes: '',
   };
 }
 
@@ -1002,9 +1010,16 @@ async function importPdf(file) {
   }
   const p = parseInvoiceText(text);
   const issue = p.issueDate || todayISO();
+  const meta = PARTIES[p.party];
+  // VAT: AMSA = 15% inclusive; Vulcan in MZN = 16% inclusive (Mozambique IVA);
+  // Vulcan in USD = no VAT. Detect IVA/VAT mention to be safe.
+  let vatMode = meta.defaultVatMode;
+  if (p.party === 'VULCAN') vatMode = (p.currency === 'MZN' || /\biva\b|vat/i.test(text)) && p.currency !== 'USD' ? 'INCLUSIVE' : 'NONE';
   openInvoiceModal(null, {
     party: p.party,
     currency: p.currency,
+    vatMode,
+    vatRate: meta.vatRate,
     invoiceNumber: p.invoiceNumber,
     ctNumbers: p.ctNumbers,
     issueDate: issue,
