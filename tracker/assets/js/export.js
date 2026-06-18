@@ -5,7 +5,7 @@
    ========================================================================== */
 
 import {
-  PARTIES, computeInvoice, summarise, fmtMoney, fmtDate, STATUS_LABEL, fmtNumber,
+  PARTIES, canonicalParty, computeInvoice, summarise, fmtMoney, fmtDate, STATUS_LABEL, fmtNumber,
 } from './calc.js';
 import { ENTITIES } from './config.js';
 
@@ -34,13 +34,13 @@ export async function exportExcel(invoices, refISO, partyFilter = null) {
   await loadScript(CDN.xlsx);
   const XLSX = window.XLSX;
   const { computed, byParty } = summarise(invoices, refISO);
-  const rows = partyFilter ? computed.filter((i) => i.party === partyFilter) : computed;
+  const rows = partyFilter ? computed.filter((i) => canonicalParty(i) === partyFilter) : computed;
 
   const wb = XLSX.utils.book_new();
 
   // --- Invoice rows ---
   const detail = rows.map((i) => ({
-    Party: PARTIES[i.party]?.name || i.party,
+    Party: PARTIES[canonicalParty(i)]?.tabLabel || i.party,
     'Invoice No': i.invoiceNumber || '',
     'CT Numbers': (i.ctNumbers || []).join(', '),
     Currency: i.currency || '',
@@ -66,7 +66,7 @@ export async function exportExcel(invoices, refISO, partyFilter = null) {
   rows.forEach((i) => {
     (i.items || []).forEach((it) => {
       lines.push({
-        Party: PARTIES[i.party]?.name || i.party,
+        Party: PARTIES[canonicalParty(i)]?.tabLabel || i.party,
         'Invoice No': i.invoiceNumber || '',
         Currency: i.currency || '',
         Description: it.description || '',
@@ -88,7 +88,7 @@ export async function exportExcel(invoices, refISO, partyFilter = null) {
     if (partyFilter && pk !== partyFilter) return;
     Object.entries(p.currencies).forEach(([cur, c]) => {
       sum.push({
-        Party: PARTIES[pk]?.name || pk,
+        Party: PARTIES[pk]?.tabLabel || pk,
         Currency: cur,
         Invoices: c.count,
         'Overdue Count': c.overdue,
@@ -114,7 +114,7 @@ export async function exportPDF(invoices, refISO, partyFilter = null) {
   await loadScript(CDN.autotable);
   const { jsPDF } = window.jspdf;
   const { computed, byParty } = summarise(invoices, refISO);
-  const rows = partyFilter ? computed.filter((i) => i.party === partyFilter) : computed;
+  const rows = partyFilter ? computed.filter((i) => canonicalParty(i) === partyFilter) : computed;
 
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
   const gold = [166, 129, 79];
@@ -127,7 +127,7 @@ export async function exportPDF(invoices, refISO, partyFilter = null) {
   doc.text('Eucharisteo Trading', 40, 32);
   doc.setTextColor(245, 241, 235); doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
   const title = partyFilter
-    ? `${PARTIES[partyFilter]?.name} — Invoice Statement`
+    ? `${PARTIES[partyFilter]?.tabLabel} — Invoice Statement`
     : 'Invoice Statement — All Parties';
   doc.text(title, 40, 50);
   doc.setFontSize(8);
@@ -143,7 +143,7 @@ export async function exportPDF(invoices, refISO, partyFilter = null) {
     if (partyFilter && pk !== partyFilter) return;
     Object.entries(p.currencies).forEach(([cur, c]) => {
       sumBody.push([
-        PARTIES[pk]?.name || pk, cur, String(c.count), String(c.overdue),
+        PARTIES[pk]?.tabLabel || pk, cur, String(c.count), String(c.overdue),
         fmtMoney(c.invoiced, cur), fmtMoney(c.paid, cur), fmtMoney(c.outstanding, cur),
       ]);
     });
@@ -162,7 +162,7 @@ export async function exportPDF(invoices, refISO, partyFilter = null) {
   const body = rows
     .sort((a, b) => (a.party + (a.dueDate || '')).localeCompare(b.party + (b.dueDate || '')))
     .map((i) => ([
-      PARTIES[i.party]?.short || i.party,
+      PARTIES[canonicalParty(i)]?.short || i.party,
       i.invoiceNumber || '',
       (i.ctNumbers || []).join(', '),
       i.currency || '',
@@ -204,7 +204,7 @@ export async function exportInvoicePDF(rawInvoice, refISO) {
   const gold = [166, 129, 79], navy = [10, 14, 26];
   const W = doc.internal.pageSize.getWidth();
 
-  const party = PARTIES[i.party] || {};
+  const party = PARTIES[canonicalParty(i)] || {};
   const ent = ENTITIES[party.selfEntityKey] || {};
   const isRec = party.direction === 'RECEIVABLE';
   doc.setFillColor(...navy); doc.rect(0, 0, W, 80, 'F');

@@ -7,7 +7,7 @@ import {
   uploadAttachment, removeAttachment,
 } from './store.js';
 import {
-  PARTIES, CURRENCIES, VAT_RATE, computeInvoice, summarise, buildReminders,
+  PARTIES, PARTY_KEYS, canonicalParty, CURRENCIES, VAT_RATE, computeInvoice, summarise, buildReminders,
   outstandingSummaryLines, fmtMoney, fmtDate, fmtNumber, todayISO, addDays, dayDiff,
   STATUS_LABEL, subtotalOf, paidOf,
 } from './calc.js';
@@ -228,14 +228,14 @@ function renderSummary() {
   host.innerHTML = '';
   const { byParty } = summarise(state.invoices, todayISO());
 
-  for (const key of ['VULCAN', 'AMSA']) {
+  for (const key of PARTY_KEYS) {
     const meta = PARTIES[key];
     const data = byParty[key];
     const card = el('div', 'pcard');
     const flow = meta.direction === 'RECEIVABLE'
-      ? `Receivable · ${meta.selfEntityName} invoices ${meta.short}`
-      : `Payable · ${meta.short} invoices ${meta.selfEntityName}`;
-    let html = `<h3>${esc(meta.name)}${data?.overdue ? `<span class="pill pill-red">${data.overdue} overdue</span>` : ''}</h3>`
+      ? `Receivable · ${meta.selfEntityName} → ${meta.client} · VAT ${Math.round(meta.vatRate * 100)}%`
+      : `Payable · ${meta.client} → ${meta.selfEntityName} · VAT ${Math.round(meta.vatRate * 100)}%`;
+    let html = `<h3>${esc(meta.tabLabel)}${data?.overdue ? `<span class="pill pill-red">${data.overdue} overdue</span>` : ''}</h3>`
       + `<div class="flow">${flow}</div>`;
     if (!data) {
       html += '<div class="empty">No invoices yet</div>';
@@ -302,7 +302,7 @@ function renderReminders() {
 
 function filteredRaw() {
   let rows = state.invoices.slice();
-  if (state.filter !== 'ALL') rows = rows.filter((i) => i.party === state.filter);
+  if (state.filter !== 'ALL') rows = rows.filter((i) => canonicalParty(i) === state.filter);
   if (state.search) {
     const q = state.search;
     rows = rows.filter((i) =>
@@ -343,7 +343,7 @@ function renderTable() {
     const paidChecked = i._status === 'PAID' ? 'checked' : '';
     tr.innerHTML =
       `<td class="center"><input type="checkbox" class="paid-check" data-id="${esc(i.id)}" ${paidChecked} title="Tick when paid in full"></td>` +
-      `<td class="nowrap">${esc(PARTIES[i.party]?.short || i.party)}</td>` +
+      `<td class="nowrap">${esc(PARTIES[canonicalParty(i)]?.short || i.party)}</td>` +
       `<td class="nowrap"><b>${esc(i.invoiceNumber || '—')}</b>${(i.attachments && i.attachments.length) ? ' <span title="Has attachments">📎</span>' : ''}</td>` +
       `<td>${cts || '<span class="muted">—</span>'}</td>` +
       `<td class="nowrap">${fmtDate(i.issueDate)}</td>` +
@@ -405,7 +405,7 @@ async function togglePaid(id, checked) {
 }
 
 /* ============================ invoice modal ============================ */
-function blankInvoice(party = 'VULCAN') {
+function blankInvoice(party = 'VULCAN_EC') {
   const meta = PARTIES[party];
   return {
     id: null, party,
@@ -420,7 +420,7 @@ function blankInvoice(party = 'VULCAN') {
 function openInvoiceModal(id, prefill) {
   const existing = id ? state.invoices.find((i) => i.id === id) : null;
   // deep clone so edits aren't applied until Save
-  const draft = existing ? JSON.parse(JSON.stringify(existing)) : blankInvoice(prefill?.party || 'VULCAN');
+  const draft = existing ? JSON.parse(JSON.stringify(existing)) : blankInvoice(prefill?.party || 'VULCAN_EC');
   if (prefill && !existing) {
     Object.assign(draft, prefill);
     if (!prefill.vatMode) draft.vatMode = PARTIES[draft.party]?.defaultVatMode || draft.vatMode;
@@ -832,11 +832,14 @@ function detectHeaderMap(headerRow) {
 const cellOf = (r, m, f) => (m[f] != null ? (r[m[f]] ?? '') : '');
 
 function partyFrom(raw, currency) {
-  if (/amsa/i.test(raw)) return 'AMSA';
-  if (/vulcan/i.test(raw)) return 'VULCAN';
+  const s = String(raw || '');
   const c = String(currency || '').toUpperCase();
+  if (/amsa|arcelor/i.test(s)) return 'AMSA';
+  if (/eucharisteo/i.test(s)) return 'VULCAN_ECT';
+  if (/\bec\b|lda|limitada/i.test(s)) return 'VULCAN_EC';
+  if (/vulcan/i.test(s)) return c === 'USD' ? 'VULCAN_ECT' : 'VULCAN_EC';
   if (c === 'ZAR' || c === 'R') return 'AMSA';
-  return 'VULCAN';
+  return c === 'USD' ? 'VULCAN_ECT' : 'VULCAN_EC';
 }
 
 function invoiceFromHeaderRow(r, m) {
@@ -870,7 +873,7 @@ function invoiceFromHeaderRow(r, m) {
 
 function invoiceFromPositionalRow(r) {
   if (/^party$/i.test(r[0]) || /invoice\s*no/i.test(r[1] || '')) return null; // stray header
-  const party = /amsa/i.test(r[0] || '') ? 'AMSA' : 'VULCAN';
+  const party = partyFrom(r[0] || '', r[8]);
   const meta = PARTIES[party];
   const ct = (r[2] || '').split(/[ ,;]+/).map((s) => s.trim()).filter(Boolean);
   const issueDate = normDate(r[3]) || todayISO();
@@ -1014,7 +1017,9 @@ async function importPdf(file) {
   // VAT: AMSA = 15% inclusive; Vulcan in MZN = 16% inclusive (Mozambique IVA);
   // Vulcan in USD = no VAT. Detect IVA/VAT mention to be safe.
   let vatMode = meta.defaultVatMode;
-  if (p.party === 'VULCAN') vatMode = (p.currency === 'MZN' || /\biva\b|vat/i.test(text)) && p.currency !== 'USD' ? 'INCLUSIVE' : 'NONE';
+  if (meta.direction === 'RECEIVABLE') { // a Vulcan ledger: USD invoice = no VAT, MZN = 16% inclusive
+    vatMode = (p.currency === 'USD') ? 'NONE' : 'INCLUSIVE';
+  }
   openInvoiceModal(null, {
     party: p.party,
     currency: p.currency,
@@ -1034,13 +1039,16 @@ async function importPdf(file) {
 function parseInvoiceText(text) {
   const flat = text.replace(/ /g, ' ').replace(/\s+/g, ' ').trim();
 
-  let party = /amsa|arcelor\s*mittal/i.test(flat) ? 'AMSA'
-    : /vulcan/i.test(flat) ? 'VULCAN' : null;
   let currency = /\bUSD\b|US\$/.test(flat) ? 'USD'
     : /\bMZN\b|metical/i.test(flat) ? 'MZN'   // note: "MT"/"MTn" = metric tonnes, NOT Metical
     : /\bZAR\b|\bR\s?\d/.test(flat) ? 'ZAR'
     : /\$/.test(flat) ? 'USD' : null;
-  if (!party) party = currency === 'ZAR' ? 'AMSA' : 'VULCAN';
+  // which ledger? AMSA, or EC Trading LDA -> Vulcan, or Eucharisteo Trading (Pty) -> Vulcan
+  let party;
+  if (/amsa|arcelor\s*mittal/i.test(flat)) party = 'AMSA';
+  else if (/eucharisteo\s+trading/i.test(flat)) party = 'VULCAN_ECT'; // note: email "eucharisteotrading" has no space
+  else if (/\bec\s+trading\b|limitada|\blda\b/i.test(flat)) party = 'VULCAN_EC';
+  else party = currency === 'ZAR' ? 'AMSA' : (currency === 'MZN' ? 'VULCAN_EC' : 'VULCAN_ECT');
   if (!currency) currency = PARTIES[party].defaultCurrency;
 
   let invoiceNumber = '';

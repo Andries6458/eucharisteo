@@ -4,37 +4,61 @@
    ========================================================================== */
 
 export const PARTIES = {
-  VULCAN: {
-    key: 'VULCAN',
+  VULCAN_EC: {
+    key: 'VULCAN_EC',
     name: 'Vulcan Mozambique',
-    short: 'Vulcan',
-    /* Eucharisteo invoices Vulcan -> money owed TO us (receivable) */
+    client: 'Vulcan Mozambique',
+    short: 'EC→Vulcan',
+    tabLabel: 'EC Trading → Vulcan',
     direction: 'RECEIVABLE',
-    defaultCurrency: 'USD',
-    defaultVatMode: 'NONE',
-    vatRate: 0.16, // Mozambique IVA (16%) when VAT applies
+    defaultCurrency: 'MZN',
+    defaultVatMode: 'INCLUSIVE',
+    vatRate: 0.16, // Mozambique IVA (16%)
     defaultTermsDays: 30,
-    /* Eucharisteo's entity for this relationship: the Mozambique company */
     selfEntityKey: 'ECT_LDA',
     selfEntityName: 'EC Trading LDA',
+  },
+  VULCAN_ECT: {
+    key: 'VULCAN_ECT',
+    name: 'Vulcan Mozambique',
+    client: 'Vulcan Mozambique',
+    short: 'ECT→Vulcan',
+    tabLabel: 'Eucharisteo Trading → Vulcan',
+    direction: 'RECEIVABLE',
+    defaultCurrency: 'MZN',
+    defaultVatMode: 'INCLUSIVE',
+    vatRate: 0.16, // Mozambique IVA (16%)
+    defaultTermsDays: 30,
+    selfEntityKey: 'EUCHARISTEO_SA',
+    selfEntityName: 'Eucharisteo Trading (Pty) Ltd',
   },
   AMSA: {
     key: 'AMSA',
     name: 'AMSA Vanderbijlpark',
-    short: 'AMSA',
-    /* AMSA invoices Eucharisteo -> money WE owe (payable) */
+    client: 'AMSA Vanderbijlpark',
+    short: 'AMSA→ECT',
+    tabLabel: 'AMSA → Eucharisteo Trading',
     direction: 'PAYABLE',
     defaultCurrency: 'ZAR',
     defaultVatMode: 'INCLUSIVE',
     vatRate: 0.15, // South African VAT (15%)
     defaultTermsDays: 30,
-    /* Eucharisteo's entity for this relationship: the South African company */
     selfEntityKey: 'EUCHARISTEO_SA',
     selfEntityName: 'Eucharisteo Trading (Pty) Ltd',
   },
 };
 
-export const VAT_RATE = 0.15; // 15% South African VAT
+/** Canonical party key, mapping any legacy 'VULCAN' records by currency. */
+export function canonicalParty(inv) {
+  const p = inv && inv.party;
+  if (PARTIES[p]) return p;
+  if (p === 'VULCAN') return inv.currency === 'MZN' ? 'VULCAN_EC' : 'VULCAN_ECT';
+  return p || 'VULCAN_ECT';
+}
+
+export const PARTY_KEYS = ['VULCAN_EC', 'VULCAN_ECT', 'AMSA'];
+
+export const VAT_RATE = 0.15; // default VAT fallback
 
 export const CURRENCIES = {
   USD: { code: 'USD', symbol: '$', locale: 'en-US' },
@@ -121,7 +145,7 @@ export function paidOf(payments = []) {
 export function computeInvoice(inv, refISO = todayISO()) {
   const items = inv.items || [];
   const vatMode = inv.vatMode || 'NONE';
-  const rate = inv.vatRate != null ? inv.vatRate : (PARTIES[inv.party]?.vatRate ?? VAT_RATE);
+  const rate = inv.vatRate != null ? inv.vatRate : (PARTIES[canonicalParty(inv)]?.vatRate ?? VAT_RATE);
   const sub = subtotalOf(items);
 
   let net, vat, total;
@@ -198,7 +222,7 @@ export function summarise(invoices, refISO = todayISO()) {
   const byParty = {};
 
   for (const inv of computed) {
-    const party = inv.party || 'VULCAN';
+    const party = canonicalParty(inv);
     const cur = inv.currency || PARTIES[party]?.defaultCurrency || 'ZAR';
     byParty[party] ||= { currencies: {}, count: 0, overdue: 0 };
     const p = byParty[party];
@@ -259,7 +283,7 @@ export function buildReminders(invoices, refISO = todayISO(), opts = {}) {
         invoice: inv,
         title: `${ref(inv)} is ${d} day${plural(d)} overdue`
           + (critical ? ' — CRITICAL' : tier ? ` (${tier}+ days)` : ''),
-        detail: `${PARTIES[inv.party]?.name} · balance ${fmtMoney(inv._balance, inv.currency)} · due ${fmtDate(inv.dueDate)}`,
+        detail: `${PARTIES[canonicalParty(inv)]?.tabLabel || PARTIES[canonicalParty(inv)]?.name} · balance ${fmtMoney(inv._balance, inv.currency)} · due ${fmtDate(inv.dueDate)}`,
       });
     } else if (inv._daysToDue != null && inv._daysToDue <= maxLead) {
       // DUE SOON — within the lead-time window
@@ -270,7 +294,7 @@ export function buildReminders(invoices, refISO = todayISO(), opts = {}) {
         priority: 100 - d,
         invoice: inv,
         title: d === 0 ? `${ref(inv)} is due today` : `${ref(inv)} due in ${d} day${plural(d)}`,
-        detail: `${PARTIES[inv.party]?.name} · balance ${fmtMoney(inv._balance, inv.currency)} · due ${fmtDate(inv.dueDate)}`,
+        detail: `${PARTIES[canonicalParty(inv)]?.tabLabel || PARTIES[canonicalParty(inv)]?.name} · balance ${fmtMoney(inv._balance, inv.currency)} · due ${fmtDate(inv.dueDate)}`,
       });
     }
 
@@ -285,7 +309,7 @@ export function buildReminders(invoices, refISO = todayISO(), opts = {}) {
         priority: 20 + (inv._daysSinceActivity - stalenessDays),
         invoice: inv,
         title: `No payment activity on ${ref(inv)} for ${inv._daysSinceActivity} days`,
-        detail: `${PARTIES[inv.party]?.name} · balance ${fmtMoney(inv._balance, inv.currency)}`,
+        detail: `${PARTIES[canonicalParty(inv)]?.tabLabel || PARTIES[canonicalParty(inv)]?.name} · balance ${fmtMoney(inv._balance, inv.currency)}`,
       });
     }
   }
@@ -297,7 +321,7 @@ export function buildReminders(invoices, refISO = todayISO(), opts = {}) {
 export function outstandingSummaryLines(invoices, refISO = todayISO()) {
   const { byParty } = summarise(invoices, refISO);
   const lines = [];
-  for (const key of ['VULCAN', 'AMSA']) {
+  for (const key of PARTY_KEYS) {
     const data = byParty[key];
     if (!data) continue;
     const parts = Object.entries(data.currencies)
@@ -306,7 +330,7 @@ export function outstandingSummaryLines(invoices, refISO = todayISO()) {
     if (parts.length) {
       lines.push({
         party: key,
-        name: PARTIES[key].name,
+        name: PARTIES[key].short,
         text: parts.join('  +  '),
         overdue: data.overdue,
       });
