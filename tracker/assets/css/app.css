@@ -150,6 +150,10 @@ table.inv .num{text-align:right;font-variant-numeric:tabular-nums;white-space:no
 .badge-due_soon{color:var(--amber);background:var(--amber-bg)}
 .badge-outstanding{color:var(--blue);background:var(--blue-bg)}
 .partial-tag{font-size:.68rem;color:var(--amber);margin-left:.3rem}
+.paid-check{width:18px;height:18px;cursor:pointer;accent-color:var(--green)}
+table.inv tr.totrow{background:var(--surface2)}
+table.inv tr.totrow:hover{background:var(--surface2)}
+table.inv tr.totrow td{border-top:2px solid var(--border);cursor:default;color:var(--gold)}
 
 /* ---------- modal ---------- */
 .modal-overlay{position:fixed;inset:0;background:rgba(5,7,12,.75);backdrop-filter:blur(4px);

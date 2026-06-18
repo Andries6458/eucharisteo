@@ -238,7 +238,9 @@ function renderTable() {
       + ((i.ctNumbers || []).length > 4 ? ` <span class="muted">+${i.ctNumbers.length - 4}</span>` : '');
     const overdueTxt = i._daysOverdue ? ` <span class="muted">${i._daysOverdue}d</span>` : '';
     const partial = i._partial ? '<span class="partial-tag">partial</span>' : '';
+    const paidChecked = i._status === 'PAID' ? 'checked' : '';
     tr.innerHTML =
+      `<td class="center"><input type="checkbox" class="paid-check" data-id="${esc(i.id)}" ${paidChecked} title="Tick when paid in full"></td>` +
       `<td class="nowrap">${esc(PARTIES[i.party]?.short || i.party)}</td>` +
       `<td class="nowrap"><b>${esc(i.invoiceNumber || '—')}</b>${(i.attachments && i.attachments.length) ? ' <span title="Has attachments">📎</span>' : ''}</td>` +
       `<td>${cts || '<span class="muted">—</span>'}</td>` +
@@ -248,8 +250,55 @@ function renderTable() {
       `<td class="num">${esc(fmtMoney(i._total, i.currency))}</td>` +
       `<td class="num">${esc(fmtMoney(i._paid, i.currency))}</td>` +
       `<td class="num"><b>${esc(fmtMoney(i._balance, i.currency))}</b></td>`;
-    tr.addEventListener('click', () => openInvoiceModal(i.id));
+    tr.addEventListener('click', (e) => {
+      if (e.target.classList.contains('paid-check')) return; // let the checkbox do its thing
+      openInvoiceModal(i.id);
+    });
     body.appendChild(tr);
+  }
+
+  // wire the "paid" checkboxes
+  $$('.paid-check', body).forEach((cb) => cb.addEventListener('change', (e) => {
+    e.stopPropagation();
+    togglePaid(cb.dataset.id, cb.checked);
+  }));
+
+  // totals row(s) — one per currency so the numbers reconcile with the list
+  const byCur = {};
+  for (const i of rows) {
+    const cur = i.currency || 'ZAR';
+    (byCur[cur] ||= { t: 0, p: 0, b: 0 });
+    byCur[cur].t += i._total; byCur[cur].p += i._paid; byCur[cur].b += i._balance;
+  }
+  for (const [cur, s] of Object.entries(byCur)) {
+    const tr = el('tr', 'totrow');
+    tr.innerHTML =
+      `<td colspan="7" class="right"><b>Totals · ${esc(cur)}</b> <span class="muted">(${rows.filter((r) => (r.currency || 'ZAR') === cur).length})</span></td>` +
+      `<td class="num"><b>${esc(fmtMoney(s.t, cur))}</b></td>` +
+      `<td class="num"><b>${esc(fmtMoney(s.p, cur))}</b></td>` +
+      `<td class="num"><b>${esc(fmtMoney(s.b, cur))}</b></td>`;
+    body.appendChild(tr);
+  }
+}
+
+/** Tick = record a payment for the full balance; untick = remove auto "Marked paid" payments. */
+async function togglePaid(id, checked) {
+  const inv = state.invoices.find((x) => x.id === id);
+  if (!inv) return;
+  const draft = JSON.parse(JSON.stringify(inv));
+  draft.payments = draft.payments || [];
+  if (checked) {
+    const c = computeInvoice(draft, todayISO());
+    if (c._balance > 0.005) draft.payments.push({ date: todayISO(), amount: c._balance, note: 'Marked paid' });
+  } else {
+    draft.payments = draft.payments.filter((p) => p.note !== 'Marked paid');
+  }
+  try {
+    await saveInvoice(draft);
+    toast(checked ? 'Marked as paid ✓' : 'Marked as unpaid');
+  } catch (ex) {
+    toast('Update failed: ' + (ex.message || ex), 'err');
+    renderTable(); // revert checkbox visual on failure
   }
 }
 
