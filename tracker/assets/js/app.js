@@ -1022,8 +1022,8 @@ function parseInvoiceText(text) {
   let party = /amsa|arcelor\s*mittal/i.test(flat) ? 'AMSA'
     : /vulcan/i.test(flat) ? 'VULCAN' : null;
   let currency = /\bUSD\b|US\$/.test(flat) ? 'USD'
+    : /\bMZN\b|metical/i.test(flat) ? 'MZN'   // note: "MT"/"MTn" = metric tonnes, NOT Metical
     : /\bZAR\b|\bR\s?\d/.test(flat) ? 'ZAR'
-    : /\bMZN\b|\bMT\b/.test(flat) ? 'MZN'
     : /\$/.test(flat) ? 'USD' : null;
   if (!party) party = currency === 'ZAR' ? 'AMSA' : 'VULCAN';
   if (!currency) currency = PARTIES[party].defaultCurrency;
@@ -1044,16 +1044,34 @@ function parseInvoiceText(text) {
 
   const ctNumbers = [...new Set((flat.match(/CT\s*-?\s*\d{2,}/gi) || []).map((s) => s.replace(/\s+/g, '').toUpperCase()))];
 
-  // total: prefer a money figure next to a "total"-type label, else the largest
+  // total: prefer a money figure next to a "total"-type label (decimals optional,
+  // handles space/comma thousands and either ./, decimal separators)
   let amount = 0;
-  const re = /(grand total|total due|amount due|balance due|total|amount)\D{0,18}([0-9][0-9 ,]*\.\d{2})/ig;
+  const re = /(grand total|total due|amount due|balance due|invoice total|total|amount)\D{0,20}([0-9][0-9 ,.]*[0-9]|\d)/ig;
   let m;
-  while ((m = re.exec(flat))) { const v = parseFloat(m[2].replace(/[ ,]/g, '')); if (v > amount) amount = v; }
+  while ((m = re.exec(flat))) { const v = parseMoney(m[2]); if (v > amount) amount = v; }
   if (!amount) {
-    const nums = (flat.match(/[0-9][0-9 ,]*\.\d{2}/g) || []).map((s) => parseFloat(s.replace(/[ ,]/g, '')));
-    if (nums.length) amount = Math.max(...nums);
+    // fallback: the largest number that has a 2-digit decimal part
+    const toks = flat.match(/[0-9][0-9 ,.]*[.,]\d{2}\b/g) || [];
+    const vals = toks.map(parseMoney).filter((v) => v > 0);
+    if (vals.length) amount = Math.max(...vals);
   }
   return { party, currency, invoiceNumber, issueDate, dueDate, ctNumbers, amount };
+}
+
+/** Parse a money string in any common format (1 885 000.00, 1,885,000.00, 1 885 000,00). */
+function parseMoney(raw) {
+  let s = String(raw).replace(/[^\d.,]/g, '');
+  if (!s) return 0;
+  const lastComma = s.lastIndexOf(','), lastDot = s.lastIndexOf('.');
+  let dec = -1;
+  if (lastComma > -1 && lastDot > -1) dec = Math.max(lastComma, lastDot);
+  else if (lastComma > -1) dec = (s.length - lastComma - 1 === 2) ? lastComma : -1;
+  else if (lastDot > -1) dec = (s.length - lastDot - 1 <= 2 && s.length - lastDot - 1 >= 1) ? lastDot : -1;
+  if (dec > -1) s = s.slice(0, dec).replace(/[.,]/g, '') + '.' + s.slice(dec + 1).replace(/[.,]/g, '');
+  else s = s.replace(/[.,]/g, '');
+  const v = parseFloat(s);
+  return Number.isNaN(v) ? 0 : v;
 }
 
 /* ============================ menu / backup ============================ */
