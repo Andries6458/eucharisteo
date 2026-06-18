@@ -21,7 +21,10 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const el = (t, c, h) => { const e = document.createElement(t); if (c) e.className = c; if (h != null) e.innerHTML = h; return e; };
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
 
-let state = { invoices: [], filter: 'ALL', search: '' };
+let state = {
+  invoices: [], filter: 'ALL', search: '', status: 'ALL',
+  fxBase: localStorage.getItem('eucharisteo:fxBase') || 'ZAR',
+};
 
 /* ============================ boot ============================ */
 (async function boot() {
@@ -104,10 +107,17 @@ function wireChrome() {
     $$('#party-tabs .tab').forEach((x) => x.classList.remove('active'));
     t.classList.add('active');
     state.filter = t.dataset.party;
-    renderTable();
+    renderTable(); renderCombined();
   }));
 
-  $('#search').addEventListener('input', (e) => { state.search = e.target.value.toLowerCase(); renderTable(); });
+  $$('#status-tabs .tab').forEach((t) => t.addEventListener('click', () => {
+    $$('#status-tabs .tab').forEach((x) => x.classList.remove('active'));
+    t.classList.add('active');
+    state.status = t.dataset.status;
+    renderTable(); renderCombined();
+  }));
+
+  $('#search').addEventListener('input', (e) => { state.search = e.target.value.toLowerCase(); renderTable(); renderCombined(); });
 
   $('#btn-excel').addEventListener('click', () =>
     safe(() => exportExcel(filteredRaw(), todayISO(), state.filter === 'ALL' ? null : state.filter), 'Excel exported'));
@@ -126,8 +136,91 @@ function wireChrome() {
 /* ============================ render ============================ */
 function renderAll() {
   renderSummary();
+  renderCombined();
   renderReminders();
   renderTable();
+}
+
+/* ---- daily exchange rates (free, no key; cached per day in localStorage) ---- */
+async function getRates(base) {
+  const today = todayISO();
+  const key = `eucharisteo:fx:${base}`;
+  try { const c = JSON.parse(localStorage.getItem(key) || 'null'); if (c && c.date === today) return c; } catch { /* ignore */ }
+  const res = await fetch(`https://open.er-api.com/v6/latest/${base}`);
+  const j = await res.json();
+  if (j.result !== 'success' || !j.rates) throw new Error('rate lookup failed');
+  const data = { date: today, base, rates: j.rates, updated: j.time_last_update_utc || today };
+  localStorage.setItem(key, JSON.stringify(data));
+  return data;
+}
+
+async function renderCombined() {
+  const host = $('#combined');
+  if (!host || !getUser()) return;
+  const base = state.fxBase || 'ZAR';
+  const rows = filteredRaw().map((i) => computeInvoice(i, todayISO()));
+
+  // sum per currency
+  const perCur = {};
+  for (const i of rows) {
+    const c = i.currency || 'ZAR';
+    (perCur[c] ||= { inv: 0, paid: 0, out: 0 });
+    perCur[c].inv += i._total; perCur[c].paid += i._paid; perCur[c].out += i._balance;
+  }
+  const currencies = Object.keys(perCur);
+  const baseOpts = Object.keys(CURRENCIES)
+    .map((c) => `<option value="${c}" ${base === c ? 'selected' : ''}>${c}</option>`).join('');
+
+  if (!currencies.length) {
+    host.innerHTML = `<div class="combined-head"><h3>Combined total</h3>
+      <label class="fx-base">Show in <select id="fx-base">${baseOpts}</select></label></div>
+      <div class="muted" style="font-size:.85rem">No invoices in this view.</div>`;
+    $('#fx-base', host).addEventListener('change', onBaseChange);
+    return;
+  }
+
+  let rates = null, err = null;
+  try { rates = await getRates(base); } catch (e) { err = e; }
+
+  let cInv = 0, cPaid = 0, cOut = 0, complete = true;
+  const rateLines = [];
+  for (const [c, s] of Object.entries(perCur)) {
+    if (c === base) { cInv += s.inv; cPaid += s.paid; cOut += s.out; continue; }
+    const r = rates && rates.rates && rates.rates[c]; // base -> c
+    if (!r) { complete = false; continue; }
+    cInv += s.inv / r; cPaid += s.paid / r; cOut += s.out / r;
+    rateLines.push(`1 ${c} = ${fmtMoney(1 / r, base)}`);
+  }
+
+  const perCurHtml = Object.entries(perCur).map(([c, s]) =>
+    `<div class="cc-line"><span class="muted">${c}</span>`
+    + `<span>inv ${esc(fmtMoney(s.inv, c))}</span>`
+    + `<span class="paid">paid ${esc(fmtMoney(s.paid, c))}</span>`
+    + `<span class="out">out ${esc(fmtMoney(s.out, c))}</span></div>`).join('');
+
+  host.innerHTML = `
+    <div class="combined-head">
+      <h3>Combined total <span class="muted" style="font-weight:400;font-size:.8rem">(converted)</span></h3>
+      <label class="fx-base">Show in <select id="fx-base">${baseOpts}</select></label>
+    </div>
+    <div class="cc-grid">
+      <div class="cc-metric"><span class="lbl">Invoiced</span><span class="val">${err ? '—' : esc(fmtMoney(cInv, base))}</span></div>
+      <div class="cc-metric"><span class="lbl">Paid</span><span class="val paid">${err ? '—' : esc(fmtMoney(cPaid, base))}</span></div>
+      <div class="cc-metric"><span class="lbl">Outstanding</span><span class="val out big">${err ? '—' : esc(fmtMoney(cOut, base))}</span></div>
+    </div>
+    <div class="cc-percur">${perCurHtml}</div>
+    <div class="cc-foot muted">
+      ${err
+        ? '⚠️ Live exchange rates unavailable (offline?). Per-currency totals above are exact.'
+        : (complete ? '' : '⚠️ Some currencies had no rate. ') + `Daily rates${rateLines.length ? ' · ' + rateLines.join(' · ') : ''} · as of ${esc((rates && rates.date) || todayISO())} · indicative only`}
+    </div>`;
+  $('#fx-base', host).addEventListener('change', onBaseChange);
+}
+
+function onBaseChange(e) {
+  state.fxBase = e.target.value;
+  localStorage.setItem('eucharisteo:fxBase', state.fxBase);
+  renderCombined();
 }
 
 function renderSummary() {
@@ -216,6 +309,15 @@ function filteredRaw() {
       (i.invoiceNumber || '').toLowerCase().includes(q) ||
       (i.notes || '').toLowerCase().includes(q) ||
       (i.ctNumbers || []).some((ct) => String(ct).toLowerCase().includes(q)));
+  }
+  if (state.status !== 'ALL') {
+    rows = rows.filter((i) => {
+      const c = computeInvoice(i, todayISO());
+      if (state.status === 'PAID') return c._status === 'PAID';
+      if (state.status === 'UNPAID') return c._status !== 'PAID';
+      if (state.status === 'OVERDUE') return c._status === 'OVERDUE';
+      return true;
+    });
   }
   return rows;
 }

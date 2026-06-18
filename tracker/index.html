@@ -69,6 +69,8 @@
 
       <div id="summary" class="summary-grid"></div>
 
+      <div id="combined" class="combined-panel"></div>
+
       <div class="reminders" id="reminders-panel">
         <div class="head">
           <h3 class="section-title" style="font-size:1.25rem;margin:0">Reminders</h3>
@@ -81,8 +83,14 @@
       <div class="toolbar">
         <div class="tabs" id="party-tabs">
           <button class="tab active" data-party="ALL">All</button>
-          <button class="tab" data-party="VULCAN">Vulcan</button>
-          <button class="tab" data-party="AMSA">AMSA</button>
+          <button class="tab" data-party="VULCAN">EC&nbsp;→&nbsp;Vulcan</button>
+          <button class="tab" data-party="AMSA">AMSA&nbsp;→&nbsp;ECT</button>
+        </div>
+        <div class="tabs" id="status-tabs">
+          <button class="tab active" data-status="ALL">All</button>
+          <button class="tab" data-status="UNPAID">Unpaid</button>
+          <button class="tab" data-status="PAID">Paid</button>
+          <button class="tab" data-status="OVERDUE">Overdue</button>
         </div>
         <div class="search">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
