@@ -1029,33 +1029,33 @@ function parseInvoiceText(text) {
   if (!currency) currency = PARTIES[party].defaultCurrency;
 
   let invoiceNumber = '';
-  const cand = flat.match(/invoice\s*(?:no\.?|number|num|#)\s*[:#.]?\s*([A-Za-z0-9][A-Za-z0-9\-\/]{2,})/i)
+  const cand = flat.match(/(?:invoice|factura|fatura)\s*(?:n[ºo.]*\s*|no\.?\s*|number\s*|num\s*|#\s*)?[:#.]?\s*([0-9][0-9A-Za-z\/-]{1,})/i)
     || flat.match(/\b(INV[-\/]?\d[A-Za-z0-9\-\/]*)\b/i);
-  if (cand && /\d/.test(cand[1]) && !/^(invoice|no|number|tax|date)$/i.test(cand[1])) {
+  if (cand && /\d/.test(cand[1]) && !/^(invoice|no|number|tax|date|total)$/i.test(cand[1])) {
     invoiceNumber = cand[1].replace(/[.,;]$/, '');
   }
 
-  const dateRe = /\b(\d{4}[\/.\-]\d{1,2}[\/.\-]\d{1,2}|\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})\b/g;
-  const dates = (flat.match(dateRe) || []).map((d) => normDate(d)).filter(Boolean);
-  const issueDate = dates[0] || '';
+  // dates: numeric (yyyy-mm-dd, dd/mm/yyyy) plus DD-Mon-YYYY / Portuguese months
+  const MON = '(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|fev|abr|mai|ago|set|out|dez)[a-z]*';
+  const dateRe = new RegExp(
+    `\\b(\\d{4}[\\/.\\-]\\d{1,2}[\\/.\\-]\\d{1,2}|\\d{1,2}[\\/.\\-]\\d{1,2}[\\/.\\-]\\d{2,4}|\\d{1,2}[\\s\\-]${MON}[\\s\\-]\\d{2,4})\\b`, 'ig');
+  const allDates = (flat.match(dateRe) || []).map((d) => normDate(d)).filter(Boolean).sort();
+  const issueDate = allDates[0] || ''; // earliest date = invoice date
   let dueDate = '';
-  const dm = flat.match(/due\s*(?:date)?\s*[:#]?\s*(\d{4}[\/.\-]\d{1,2}[\/.\-]\d{1,2}|\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})/i);
+  const dm = flat.match(new RegExp(
+    `(?:due\\s*date|due|payable|vencimento)\\D{0,14}(\\d{4}[\\/.\\-]\\d{1,2}[\\/.\\-]\\d{1,2}|\\d{1,2}[\\/.\\-]\\d{1,2}[\\/.\\-]\\d{2,4}|\\d{1,2}[\\s\\-]${MON}[\\s\\-]\\d{2,4})`, 'i'));
   if (dm) dueDate = normDate(dm[1]);
 
   const ctNumbers = [...new Set((flat.match(/CT\s*-?\s*\d{2,}/gi) || []).map((s) => s.replace(/\s+/g, '').toUpperCase()))];
 
-  // total: prefer a money figure next to a "total"-type label (decimals optional,
-  // handles space/comma thousands and either ./, decimal separators)
-  let amount = 0;
-  const re = /(grand total|total due|amount due|balance due|invoice total|total|amount)\D{0,20}([0-9][0-9 ,.]*[0-9]|\d)/ig;
-  let m;
-  while ((m = re.exec(flat))) { const v = parseMoney(m[2]); if (v > amount) amount = v; }
-  if (!amount) {
-    // fallback: the largest number that has a 2-digit decimal part
-    const toks = flat.match(/[0-9][0-9 ,.]*[.,]\d{2}\b/g) || [];
-    const vals = toks.map(parseMoney).filter((v) => v > 0);
-    if (vals.length) amount = Math.max(...vals);
-  }
+  // total = the largest monetary value in the document (the grand total is
+  // virtually always the biggest figure). Count only numbers with a 2-decimal
+  // part, and ignore date-shaped tokens like 2025.07.15.
+  const moneyToks = (flat.match(/(?:\d{1,3}(?:[ ,]\d{3})+[.,]\d{2}|\d{1,9}[.,]\d{2})(?!\d)/g) || [])
+    .filter((t) => !/^\d{4}[.,]\d{1,2}[.,]\d{1,2}$/.test(t.trim()));
+  const vals = moneyToks.map(parseMoney).filter((v) => v > 0);
+  const amount = vals.length ? Math.max(...vals) : 0;
+
   return { party, currency, invoiceNumber, issueDate, dueDate, ctNumbers, amount };
 }
 
@@ -1219,9 +1219,17 @@ function normDate(v) {
     let [, d, mo, y] = m; if (y.length === 2) y = '20' + y;
     return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
   }
-  const t = Date.parse(s);
-  return Number.isNaN(t) ? '' : new Date(t).toISOString().slice(0, 10);
+  const mn = s.match(/^(\d{1,2})[\s\-]([A-Za-z]{3,})[\s\-](\d{2,4})$/); // 01-Mar-2026
+  if (mn) {
+    const mo = MONTHS[mn[2].slice(0, 3).toLowerCase()];
+    if (mo) { let y = mn[3]; if (y.length === 2) y = '20' + y; return `${y}-${String(mo).padStart(2, '0')}-${mn[1].padStart(2, '0')}`; }
+  }
+  return '';
 }
+const MONTHS = {
+  jan: 1, feb: 2, fev: 2, mar: 3, apr: 4, abr: 4, may: 5, mai: 5, jun: 6,
+  jul: 7, aug: 8, ago: 8, sep: 9, set: 9, oct: 10, out: 10, nov: 11, dec: 12, dez: 12,
+};
 async function safe(fn, okMsg) {
   try { await fn(); if (okMsg) toast(okMsg); }
   catch (ex) { console.error(ex); toast('Failed: ' + (ex.message || ex), 'err'); }
