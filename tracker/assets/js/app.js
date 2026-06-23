@@ -232,9 +232,10 @@ function renderSummary() {
     const meta = PARTIES[key];
     const data = byParty[key];
     const card = el('div', 'pcard');
+    const vatTxt = meta.vatRate ? `VAT ${Math.round(meta.vatRate * 100)}%` : 'no VAT';
     const flow = meta.direction === 'RECEIVABLE'
-      ? `Receivable · ${meta.selfEntityName} → ${meta.client} · VAT ${Math.round(meta.vatRate * 100)}%`
-      : `Payable · ${meta.client} → ${meta.selfEntityName} · VAT ${Math.round(meta.vatRate * 100)}%`;
+      ? `Receivable · ${meta.selfEntityName} → ${meta.client} · ${vatTxt}`
+      : `Payable · ${meta.client} → ${meta.selfEntityName} · ${vatTxt}`;
     let html = `<h3>${esc(meta.tabLabel)}${data?.overdue ? `<span class="pill pill-red">${data.overdue} overdue</span>` : ''}</h3>`
       + `<div class="flow">${flow}</div>`;
     if (!data) {

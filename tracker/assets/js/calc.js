@@ -54,8 +54,8 @@ export const PARTIES = {
     tabLabel: 'Inyathi → Eucharisteo Trading',
     direction: 'PAYABLE',
     defaultCurrency: 'ZAR',
-    defaultVatMode: 'INCLUSIVE',
-    vatRate: 0.15, // South African VAT (15%)
+    defaultVatMode: 'NONE',
+    vatRate: 0, // no VAT
     defaultTermsDays: 30,
     selfEntityKey: 'EUCHARISTEO_SA',
     selfEntityName: 'Eucharisteo Trading (Pty) Ltd',
