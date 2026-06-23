@@ -834,6 +834,7 @@ const cellOf = (r, m, f) => (m[f] != null ? (r[m[f]] ?? '') : '');
 function partyFrom(raw, currency) {
   const s = String(raw || '');
   const c = String(currency || '').toUpperCase();
+  if (/inyathi/i.test(s)) return 'INYATHI';
   if (/amsa|arcelor/i.test(s)) return 'AMSA';
   if (/eucharisteo/i.test(s)) return 'VULCAN_ECT';
   if (/\bec\b|lda|limitada/i.test(s)) return 'VULCAN_EC';
@@ -1044,8 +1045,11 @@ function parseInvoiceText(text) {
     : /\bZAR\b|\bR\s?\d/.test(flat) ? 'ZAR'
     : /\$/.test(flat) ? 'USD' : null;
   // which ledger? AMSA, or EC Trading LDA -> Vulcan, or Eucharisteo Trading (Pty) -> Vulcan
+  // Suppliers (payables) are matched first — their invoices name "Eucharisteo
+  // Trading" as the bill-to, which must not be mistaken for a Vulcan ledger.
   let party;
-  if (/amsa|arcelor\s*mittal/i.test(flat)) party = 'AMSA';
+  if (/inyathi/i.test(flat)) party = 'INYATHI';
+  else if (/amsa|arcelor\s*mittal/i.test(flat)) party = 'AMSA';
   else if (/eucharisteo\s+trading/i.test(flat)) party = 'VULCAN_ECT'; // note: email "eucharisteotrading" has no space
   else if (/\bec\s+trading\b|limitada|\blda\b/i.test(flat)) party = 'VULCAN_EC';
   else party = currency === 'ZAR' ? 'AMSA' : (currency === 'MZN' ? 'VULCAN_EC' : 'VULCAN_ECT');

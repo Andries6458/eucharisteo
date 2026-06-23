@@ -46,6 +46,20 @@ export const PARTIES = {
     selfEntityKey: 'EUCHARISTEO_SA',
     selfEntityName: 'Eucharisteo Trading (Pty) Ltd',
   },
+  INYATHI: {
+    key: 'INYATHI',
+    name: 'Inyathi',
+    client: 'Inyathi',
+    short: 'INY→ECT',
+    tabLabel: 'Inyathi → Eucharisteo Trading',
+    direction: 'PAYABLE',
+    defaultCurrency: 'ZAR',
+    defaultVatMode: 'INCLUSIVE',
+    vatRate: 0.15, // South African VAT (15%)
+    defaultTermsDays: 30,
+    selfEntityKey: 'EUCHARISTEO_SA',
+    selfEntityName: 'Eucharisteo Trading (Pty) Ltd',
+  },
 };
 
 /** Canonical party key, mapping any legacy 'VULCAN' records by currency. */
@@ -56,7 +70,7 @@ export function canonicalParty(inv) {
   return p || 'VULCAN_ECT';
 }
 
-export const PARTY_KEYS = ['VULCAN_EC', 'VULCAN_ECT', 'AMSA'];
+export const PARTY_KEYS = ['VULCAN_EC', 'VULCAN_ECT', 'AMSA', 'INYATHI'];
 
 export const VAT_RATE = 0.15; // default VAT fallback
 
