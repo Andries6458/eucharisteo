@@ -428,6 +428,7 @@ function openInvoiceModal(id, prefill) {
     if (draft.vatRate == null) draft.vatRate = PARTIES[draft.party]?.vatRate;
   }
   if (!draft.items?.length) draft.items = [{ description: '', qty: 1, unitPrice: 0 }];
+  if (PARTIES[canonicalParty(draft)]?.vatRate === 0) { draft.vatMode = 'NONE'; draft.vatRate = 0; }
 
   const host = $('#modal-host');
   host.innerHTML = '';

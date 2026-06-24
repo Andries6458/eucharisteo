@@ -158,8 +158,10 @@ export function paidOf(payments = []) {
  */
 export function computeInvoice(inv, refISO = todayISO()) {
   const items = inv.items || [];
-  const vatMode = inv.vatMode || 'NONE';
-  const rate = inv.vatRate != null ? inv.vatRate : (PARTIES[canonicalParty(inv)]?.vatRate ?? VAT_RATE);
+  const partyRate = PARTIES[canonicalParty(inv)]?.vatRate;
+  let vatMode = inv.vatMode || 'NONE';
+  let rate = inv.vatRate != null ? inv.vatRate : (partyRate ?? VAT_RATE);
+  if (partyRate === 0) { vatMode = 'NONE'; rate = 0; } // ledger configured with no VAT (e.g. Inyathi)
   const sub = subtotalOf(items);
 
   let net, vat, total;
