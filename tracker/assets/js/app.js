@@ -198,9 +198,11 @@ async function renderCombined() {
     + `<span class="paid">paid ${esc(fmtMoney(s.paid, c))}</span>`
     + `<span class="out">out ${esc(fmtMoney(s.out, c))}</span></div>`).join('');
 
+  const scope = state.filter === 'INCOMING' ? 'Incoming' : state.filter === 'OUTGOING' ? 'Outgoing'
+    : (state.filter !== 'ALL' && PARTIES[state.filter]) ? PARTIES[state.filter].short : '';
   host.innerHTML = `
     <div class="combined-head">
-      <h3>Combined total <span class="muted" style="font-weight:400;font-size:.8rem">(converted)</span></h3>
+      <h3>${scope ? esc(scope) + ' total' : 'Combined total'} <span class="muted" style="font-weight:400;font-size:.8rem">(converted)</span></h3>
       <label class="fx-base">Show in <select id="fx-base">${baseOpts}</select></label>
     </div>
     <div class="cc-grid">
@@ -303,7 +305,9 @@ function renderReminders() {
 
 function filteredRaw() {
   let rows = state.invoices.slice();
-  if (state.filter !== 'ALL') rows = rows.filter((i) => canonicalParty(i) === state.filter);
+  if (state.filter === 'INCOMING') rows = rows.filter((i) => PARTIES[canonicalParty(i)]?.direction === 'RECEIVABLE');
+  else if (state.filter === 'OUTGOING') rows = rows.filter((i) => PARTIES[canonicalParty(i)]?.direction === 'PAYABLE');
+  else if (state.filter !== 'ALL') rows = rows.filter((i) => canonicalParty(i) === state.filter);
   if (state.search) {
     const q = state.search;
     rows = rows.filter((i) =>
