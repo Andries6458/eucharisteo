@@ -53,7 +53,8 @@ export const PARTIES = {
     short: 'INY→ECT',
     tabLabel: 'Inyathi → Eucharisteo Trading',
     direction: 'PAYABLE',
-    defaultCurrency: 'ZAR',
+    defaultCurrency: 'AED',
+    fixedCurrency: 'AED', // Inyathi bills only in UAE Dirhams
     defaultVatMode: 'NONE',
     vatRate: 0, // no VAT
     defaultTermsDays: 30,
@@ -78,6 +79,7 @@ export const CURRENCIES = {
   USD: { code: 'USD', symbol: '$', locale: 'en-US' },
   ZAR: { code: 'ZAR', symbol: 'R', locale: 'en-ZA' },
   MZN: { code: 'MZN', symbol: 'MT', locale: 'pt-MZ' },
+  AED: { code: 'AED', symbol: 'AED', locale: 'en-AE' },
   EUR: { code: 'EUR', symbol: '€', locale: 'de-DE' },
   GBP: { code: 'GBP', symbol: '£', locale: 'en-GB' },
 };
@@ -158,7 +160,9 @@ export function paidOf(payments = []) {
  */
 export function computeInvoice(inv, refISO = todayISO()) {
   const items = inv.items || [];
-  const partyRate = PARTIES[canonicalParty(inv)]?.vatRate;
+  const cp = canonicalParty(inv);
+  const partyRate = PARTIES[cp]?.vatRate;
+  const fixedCurrency = PARTIES[cp]?.fixedCurrency; // ledger billed only in one currency (e.g. Inyathi AED)
   let vatMode = inv.vatMode || 'NONE';
   let rate = inv.vatRate != null ? inv.vatRate : (partyRate ?? VAT_RATE);
   if (partyRate === 0) { vatMode = 'NONE'; rate = 0; } // ledger configured with no VAT (e.g. Inyathi)
@@ -206,6 +210,7 @@ export function computeInvoice(inv, refISO = todayISO()) {
 
   return {
     ...inv,
+    currency: fixedCurrency || inv.currency,
     _subtotal: sub,
     _net: net,
     _vat: vat,

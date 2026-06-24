@@ -429,6 +429,7 @@ function openInvoiceModal(id, prefill) {
   }
   if (!draft.items?.length) draft.items = [{ description: '', qty: 1, unitPrice: 0 }];
   if (PARTIES[canonicalParty(draft)]?.vatRate === 0) { draft.vatMode = 'NONE'; draft.vatRate = 0; }
+  if (PARTIES[canonicalParty(draft)]?.fixedCurrency) draft.currency = PARTIES[canonicalParty(draft)].fixedCurrency;
 
   const host = $('#modal-host');
   host.innerHTML = '';
@@ -653,10 +654,13 @@ function openInvoiceModal(id, prefill) {
   };
   const setEntityNote = () => { $('#f-entity-note', modal).textContent = entityText(draft.party); };
   $('#f-party', modal).addEventListener('change', (e) => {
+    const m = PARTIES[e.target.value];
     draft.party = e.target.value;
-    draft.vatRate = PARTIES[draft.party]?.vatRate; // 16% Vulcan / 15% AMSA
+    draft.vatRate = m?.vatRate;
+    if (m?.defaultVatMode === 'NONE') draft.vatMode = 'NONE';
+    if (m?.fixedCurrency) { draft.currency = m.fixedCurrency; $('#f-cur', modal).value = m.fixedCurrency; }
     $('#f-vat', modal).innerHTML = vatOptionsHtml();
-    setEntityNote(); renderTotals();
+    setEntityNote(); renderItems(); renderPays();
   });
   setEntityNote();
   $('#f-num', modal).addEventListener('input', (e) => { draft.invoiceNumber = e.target.value; });
@@ -1043,6 +1047,7 @@ function parseInvoiceText(text) {
   const flat = text.replace(/ /g, ' ').replace(/\s+/g, ' ').trim();
 
   let currency = /\bUSD\b|US\$/.test(flat) ? 'USD'
+    : /\bAED\b|dirham/i.test(flat) ? 'AED'
     : /\bMZN\b|metical/i.test(flat) ? 'MZN'   // note: "MT"/"MTn" = metric tonnes, NOT Metical
     : /\bZAR\b|\bR\s?\d/.test(flat) ? 'ZAR'
     : /\$/.test(flat) ? 'USD' : null;
