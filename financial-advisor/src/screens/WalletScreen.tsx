@@ -12,11 +12,13 @@ import {
   Bitcoin,
   Briefcase,
   Landmark,
+  LineChart,
   PiggyBank,
   Plus,
   ReceiptText,
   Trash2,
   TrendingUp,
+  Wallet as WalletIcon,
 } from 'lucide-react-native';
 
 import { useApp } from '../context/AppContext';
@@ -27,10 +29,15 @@ import {
   summarizePortfolio,
 } from '../utils/advisor';
 import { computeCapitalGainsTax, TAX_RULES } from '../utils/taxEngine';
+import {
+  computeCurrentSplit,
+  computeTargetSplit,
+} from '../utils/splitEngine';
 import { Holding } from '../types';
 import MetricCard from '../components/MetricCard';
 import GrowthChart from '../components/GrowthChart';
 import AddHoldingModal from '../components/AddHoldingModal';
+import SplitComparison from '../components/SplitComparison';
 import { colors, radius, spacing, typography } from '../theme';
 
 function holdingIcon(holding: Holding) {
@@ -39,6 +46,10 @@ function holdingIcon(holding: Holding) {
       return <Bitcoin size={18} color={colors.warning} />;
     case 'Bond':
       return <Landmark size={18} color={colors.positive} />;
+    case 'Cash':
+      return <WalletIcon size={18} color={colors.positive} />;
+    case 'ETF':
+      return <LineChart size={18} color={colors.accent} />;
     default:
       return <Briefcase size={18} color={colors.primary} />;
   }
@@ -85,6 +96,15 @@ export default function WalletScreen() {
   const series = useMemo(
     () => buildGrowthSeries(summary.totalValue, profile.riskTolerance),
     [summary.totalValue, profile.riskTolerance]
+  );
+
+  const currentSplit = useMemo(
+    () => computeCurrentSplit(holdings, baseCurrency, rates),
+    [holdings, baseCurrency, rates]
+  );
+  const targetSplit = useMemo(
+    () => computeTargetSplit(profile, baseCurrency, rates),
+    [profile, baseCurrency, rates]
   );
 
   function confirmDelete(holding: Holding) {
@@ -145,10 +165,27 @@ export default function WalletScreen() {
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Growth & 5-year projection</Text>
         <Text style={styles.sectionMeta}>
-          {profile.riskTolerance} risk profile
+          {profile.riskTolerance === 'TaxOptimised'
+            ? 'Tax-Optimised profile'
+            : `${profile.riskTolerance} risk profile`}
         </Text>
       </View>
       <GrowthChart data={series} currency={baseCurrency} />
+
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Current vs target 4-way split</Text>
+        <Text style={styles.sectionMeta}>
+          {profile.riskTolerance === 'TaxOptimised'
+            ? 'Tax-Optimised'
+            : `${profile.riskTolerance} risk`}{' '}
+          strategy
+        </Text>
+      </View>
+      <SplitComparison
+        current={currentSplit}
+        target={targetSplit}
+        baseCurrency={baseCurrency}
+      />
 
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Wallet ledger</Text>

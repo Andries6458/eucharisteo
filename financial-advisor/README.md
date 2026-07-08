@@ -9,9 +9,11 @@ codebase that ships to **Android (APK)**, **iOS**, and **Windows/desktop**
 | Area | What it does |
 | --- | --- |
 | Currency & FX engine | USD ($), ZAR (R), GBP (£) with a live mock feed that re-polls every 5 seconds; a global dropdown instantly rebases every value in the app |
-| Wallet ledger | AsyncStorage-backed ledger of assets (name, type, purchase currency, price, quantity, date) — fully local-first, works offline in a standalone APK |
+| 4-way split engine | Hardcoded allocation across Stocks / Shares (ETFs) / Crypto / Fixed Income: High 50-30-15-5, Medium 40-40-5-15, Low 15-35-0-50, plus a Tax-Optimised profile that fills the SA TFSA (R36,000), UK ISA (£20,000) or US Roth IRA allowance first |
+| Split visual | Wallet tab compares the ledger's live 4-way breakdown against the recommended split with per-class drift chips and deploy amounts |
+| Wallet ledger | AsyncStorage-backed ledger of assets (name, type — Stock/ETF/Crypto/Bond/Cash, purchase currency, price, quantity, date) — fully local-first, works offline in a standalone APK |
 | Growth chart | Touch-interactive SVG line chart: 24 months of history plus a 5-year compound projection matched to the user's risk tolerance |
-| Live advisory | Auto-refreshing FX pair grid (USD/ZAR, USD/GBP, crosses), global indices, and risk-matched advice cards sized to investable cash |
+| Live advisory | Auto-refreshing FX pair grid (USD/ZAR, USD/GBP, crosses), stock/share tickers (Apple, Tesla, S&P 500 ETF, JSE Top 40 ETF, FTSE 100 ETF), global indices, a 4-way strategy card, and risk-matched advice cards sized to investable cash |
 | Tax optimizer | US IRS, SA SARS, and UK HMRC bracket visualizers that follow the active base currency, with income tax + capital gains estimates and per-jurisdiction optimization tips |
 | User profile | Multi-currency income and cash reserves, risk tolerance (Low/Medium/High), persisted locally |
 
@@ -33,12 +35,14 @@ financial-advisor/
     ├── storage/storage.ts      # AsyncStorage persistence with seed fallback
     ├── data/seeds.ts           # Seed portfolio + profile
     ├── utils/
-    │   ├── fxEngine.ts         # 5-second mock rate feed, conversion, pairs, indices
+    │   ├── fxEngine.ts         # 5-second mock rate feed, conversion, pairs, tickers, indices
+    │   ├── splitEngine.ts      # 4-way split engine: static profiles + tax-wrapper logic
     │   ├── taxEngine.ts        # IRS / SARS / HMRC brackets, income tax + CGT
     │   ├── advisor.ts          # Risk-based recommendations, portfolio math, projections
     │   └── currencies.ts       # Currency metadata and money formatting
-    ├── components/             # CurrencySelector, GrowthChart, MetricCard,
-    │                           # AdviceCard, TaxBracketVisualizer, AddHoldingModal
+    ├── components/             # CurrencySelector, GrowthChart, SplitComparison,
+    │                           # MetricCard, AdviceCard, TaxBracketVisualizer,
+    │                           # AddHoldingModal
     └── screens/                # Wallet, Advisory, Tax, Profile
 ```
 
@@ -84,7 +88,7 @@ uvicorn main:app --reload --port 8000
 ```
 
 Endpoints: `GET /rates`, `POST /convert`, `POST /tax/estimate`,
-`POST /portfolio/summary`, `POST /advice`, `GET /health`.
+`POST /portfolio/summary`, `POST /split`, `POST /advice`, `GET /health`.
 
 ## Notes
 

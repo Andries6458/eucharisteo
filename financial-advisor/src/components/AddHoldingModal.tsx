@@ -23,7 +23,7 @@ interface AddHoldingModalProps {
   onSubmit: (holding: Omit<Holding, 'id'>) => void;
 }
 
-const ASSET_TYPES: AssetType[] = ['Stock', 'Bond', 'Crypto'];
+const ASSET_TYPES: AssetType[] = ['Stock', 'ETF', 'Crypto', 'Bond', 'Cash'];
 
 function isoToday(): string {
   return new Date().toISOString().slice(0, 10);
@@ -304,10 +304,12 @@ const styles = StyleSheet.create({
   },
   segmentRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.sm,
   },
   segment: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: 90,
     paddingVertical: spacing.md,
     borderRadius: radius.md,
     borderWidth: 1,

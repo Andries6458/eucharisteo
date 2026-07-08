@@ -17,19 +17,32 @@ import { colors, radius, spacing, typography } from '../theme';
 
 const RISK_LEVELS: Array<{
   level: RiskTolerance;
+  title: string;
   blurb: string;
 }> = [
   {
     level: 'Low',
-    blurb: 'Capital preservation first: bonds, dividend payers, cash yield.',
+    title: 'Low (Conservative)',
+    blurb:
+      '15% dividend stocks, 35% index ETFs, 0% crypto, 50% government bonds/cash.',
   },
   {
     level: 'Medium',
-    blurb: 'Balanced growth: index equities with a bond and small crypto sleeve.',
+    title: 'Medium (Balanced)',
+    blurb:
+      '40% blue-chip stocks, 40% broad market ETFs, 5% crypto, 15% cash/bonds.',
   },
   {
     level: 'High',
-    blurb: 'Aggressive growth: tech, small caps and a full crypto allocation.',
+    title: 'High (Aggressive Growth)',
+    blurb:
+      '50% high-growth stocks, 30% global ETFs, 15% crypto, 5% cash.',
+  },
+  {
+    level: 'TaxOptimised',
+    title: 'Tax-Optimised',
+    blurb:
+      'Fills your TFSA / ISA / Roth IRA allowance first, then splits the remainder across the four classes.',
   },
 ];
 
@@ -215,7 +228,7 @@ export default function ProfileScreen() {
                 <Text
                   style={[styles.riskLevel, selected && styles.riskLevelActive]}
                 >
-                  {item.level}
+                  {item.title}
                 </Text>
                 <Text style={styles.riskBlurb}>{item.blurb}</Text>
               </View>

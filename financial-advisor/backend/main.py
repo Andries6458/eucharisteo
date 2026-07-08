@@ -22,8 +22,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 CurrencyCode = Literal["USD", "ZAR", "GBP"]
-RiskTolerance = Literal["Low", "Medium", "High"]
+RiskTolerance = Literal["Low", "Medium", "High", "TaxOptimised"]
 Jurisdiction = Literal["US_IRS", "SA_SARS", "UK_HMRC"]
+AssetType = Literal["Stock", "ETF", "Crypto", "Bond", "Cash"]
+AssetClass = Literal["Stocks", "Shares", "Crypto", "FixedIncome"]
 
 app = FastAPI(
     title="Financial Advisor API",
@@ -311,7 +313,7 @@ def estimate_tax(payload: TaxRequest) -> TaxResponse:
 
 class HoldingIn(BaseModel):
     asset_name: str
-    asset_type: Literal["Stock", "Bond", "Crypto"]
+    asset_type: AssetType
     purchase_currency: CurrencyCode
     purchase_price: float = Field(gt=0)
     current_price: float = Field(gt=0)
@@ -354,10 +356,201 @@ def portfolio_summary(payload: PortfolioRequest) -> PortfolioResponse:
 
 
 # ---------------------------------------------------------------------------
+# 4-Way Portfolio Split Engine
+# ---------------------------------------------------------------------------
+
+ASSET_CLASS_ORDER: List[str] = ["Stocks", "Shares", "Crypto", "FixedIncome"]
+
+ASSET_CLASS_FOR_TYPE: Dict[str, str] = {
+    "Stock": "Stocks",
+    "ETF": "Shares",
+    "Crypto": "Crypto",
+    "Bond": "FixedIncome",
+    "Cash": "FixedIncome",
+}
+
+STATIC_SPLITS: Dict[str, dict] = {
+    "High": {
+        "weights": {"Stocks": 50, "Shares": 30, "Crypto": 15, "FixedIncome": 5},
+        "labels": {
+            "Stocks": "High-Growth Stocks",
+            "Shares": "Global Shares / ETFs",
+            "Crypto": "Crypto",
+            "FixedIncome": "Cash",
+        },
+        "strategy": (
+            "Aggressive Growth: half the portfolio in high-growth equities, a "
+            "global ETF core, a full crypto sleeve, and a thin 5% cash buffer."
+        ),
+    },
+    "Medium": {
+        "weights": {"Stocks": 40, "Shares": 40, "Crypto": 5, "FixedIncome": 15},
+        "labels": {
+            "Stocks": "Blue-Chip Stocks",
+            "Shares": "Broad Market Shares / ETFs",
+            "Crypto": "Crypto",
+            "FixedIncome": "Cash / Bonds",
+        },
+        "strategy": (
+            "Balanced: blue-chip equities and broad market ETFs split the growth "
+            "engine evenly, a 5% crypto satellite adds upside, and 15% in cash "
+            "and bonds cushions drawdowns."
+        ),
+    },
+    "Low": {
+        "weights": {"Stocks": 15, "Shares": 35, "Crypto": 0, "FixedIncome": 50},
+        "labels": {
+            "Stocks": "Dividend Stocks",
+            "Shares": "Index Shares / ETFs",
+            "Crypto": "Crypto",
+            "FixedIncome": "Government Bonds / Cash",
+        },
+        "strategy": (
+            "Conservative: half the portfolio in government bonds and cash, "
+            "index ETFs for market participation, dividend payers for income, "
+            "no crypto."
+        ),
+    },
+}
+
+WRAPPER_RULES: Dict[str, dict] = {
+    "SA_SARS": {"name": "SA Tax-Free Savings Account", "annual_cap": 36000.0, "currency": "ZAR"},
+    "UK_HMRC": {"name": "UK Stocks & Shares ISA", "annual_cap": 20000.0, "currency": "GBP"},
+    "US_IRS": {"name": "US Roth IRA", "annual_cap": 7000.0, "currency": "USD"},
+}
+
+TAX_OPT_REMAINDER_WEIGHTS: Dict[str, float] = {
+    "Stocks": 30,
+    "Shares": 35,
+    "Crypto": 5,
+    "FixedIncome": 30,
+}
+
+TAX_OPT_LABELS: Dict[str, str] = {
+    "Stocks": "Blue-Chip Stocks (taxable)",
+    "Shares": "Index ETFs (wrapper first)",
+    "Crypto": "Crypto",
+    "FixedIncome": "Bonds / Cash",
+}
+
+
+class SplitRequest(BaseModel):
+    profile: RiskTolerance
+    cash_reserves: float = Field(ge=0)
+    cash_currency: CurrencyCode = "USD"
+    base_currency: CurrencyCode = "USD"
+
+
+class SplitSlice(BaseModel):
+    asset_class: AssetClass
+    label: str
+    pct: float
+    amount: float
+
+
+class WrapperInfo(BaseModel):
+    name: str
+    cap: float
+    contribution: float
+    currency: CurrencyCode
+
+
+class SplitResponse(BaseModel):
+    profile: RiskTolerance
+    base_currency: CurrencyCode
+    investable_cash: float
+    slices: List[SplitSlice]
+    wrapper: Optional[WrapperInfo]
+    strategy: str
+
+
+@app.post("/split", response_model=SplitResponse, tags=["advisory"])
+def four_way_split(payload: SplitRequest) -> SplitResponse:
+    """Recommended 4-way split (Stocks / Shares / Crypto / Fixed Income) of
+    the user's investable cash. Tax-Optimised fills the jurisdiction's
+    tax-free wrapper before allocating the remainder."""
+    _advance_clock()
+    cash = max(0.0, _convert(payload.cash_reserves, payload.cash_currency, payload.base_currency))
+
+    if payload.profile != "TaxOptimised":
+        split = STATIC_SPLITS[payload.profile]
+        slices = [
+            SplitSlice(
+                asset_class=asset_class,  # type: ignore[arg-type]
+                label=split["labels"][asset_class],
+                pct=split["weights"][asset_class],
+                amount=cash * split["weights"][asset_class] / 100,
+            )
+            for asset_class in ASSET_CLASS_ORDER
+        ]
+        return SplitResponse(
+            profile=payload.profile,
+            base_currency=payload.base_currency,
+            investable_cash=cash,
+            slices=slices,
+            wrapper=None,
+            strategy=split["strategy"],
+        )
+
+    jurisdiction = JURISDICTION_FOR_CURRENCY[payload.base_currency]
+    wrapper_rule = WRAPPER_RULES[jurisdiction]
+    cap_in_base = _convert(wrapper_rule["annual_cap"], wrapper_rule["currency"], payload.base_currency)
+    contribution = min(cash, cap_in_base)
+    remainder = cash - contribution
+
+    amounts: Dict[str, float] = {
+        asset_class: remainder * TAX_OPT_REMAINDER_WEIGHTS[asset_class] / 100
+        for asset_class in ASSET_CLASS_ORDER
+    }
+    amounts["Shares"] += contribution
+
+    slices = [
+        SplitSlice(
+            asset_class=asset_class,  # type: ignore[arg-type]
+            label=TAX_OPT_LABELS[asset_class],
+            pct=(amounts[asset_class] / cash * 100) if cash > 0 else 0.0,
+            amount=amounts[asset_class],
+        )
+        for asset_class in ASSET_CLASS_ORDER
+    ]
+    used_pct = round(contribution / cap_in_base * 100) if cap_in_base > 0 else 0
+    return SplitResponse(
+        profile="TaxOptimised",
+        base_currency=payload.base_currency,
+        investable_cash=cash,
+        slices=slices,
+        wrapper=WrapperInfo(
+            name=wrapper_rule["name"],
+            cap=cap_in_base,
+            contribution=contribution,
+            currency=payload.base_currency,
+        ),
+        strategy=(
+            f"Tax-Optimised: contributions flow into the {wrapper_rule['name']} first "
+            f"({used_pct}% of this year's allowance used) so growth inside the wrapper is "
+            "tax-free, then the remainder is spread across blue-chip stocks, extra index "
+            "ETFs, a small crypto sleeve, and bonds/cash."
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Investment advisor
 # ---------------------------------------------------------------------------
 
 RECOMMENDATIONS: Dict[str, list] = {
+    "TaxOptimised": [
+        ("Tax-Free Wrapper Index Fund", "TFSA/ISA/ROTH", "ETF", "Buy", "USD", 45,
+         "Fill this year's tax-free wrapper allowance first so growth compounds tax-free."),
+        ("Global Index ETF (taxable account)", "VT", "ETF", "Accumulate", "USD", 20,
+         "Low-turnover index ETFs keep taxable distributions minimal once the wrapper is full."),
+        ("Blue-Chip Dividend Stocks", "DIVCORE", "Stock", "Accumulate", "USD", 15,
+         "Quality dividend payers use dividend allowances and lower dividend tax rates."),
+        ("Government Bonds / Money Market", "GOVT", "Bond", "Hold", "USD", 15,
+         "Stabilises the plan and parks next year's wrapper contribution."),
+        ("Bitcoin (small satellite)", "BTC", "Crypto", "Accumulate", "USD", 5,
+         "A capped crypto sleeve keeps upside; hold long-term for CGT exclusions."),
+    ],
     "Low": [
         ("US Treasury Bond ETF", "GOVT", "Bond", "Buy", "USD", 40,
          "Government bonds anchor a low-risk portfolio with predictable coupon income."),

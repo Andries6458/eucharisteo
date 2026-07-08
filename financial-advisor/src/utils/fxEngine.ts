@@ -1,4 +1,10 @@
-import { CurrencyCode, FxPairQuote, FxRates, MarketIndex } from '../types';
+import {
+  CurrencyCode,
+  EquityQuote,
+  FxPairQuote,
+  FxRates,
+  MarketIndex,
+} from '../types';
 
 /**
  * Local-first FX engine.
@@ -145,6 +151,36 @@ const INDEX_ANCHORS: MarketIndex[] = [
   { symbol: 'BTC', name: 'Bitcoin (USD)', region: 'Global', value: 108450.0, changePct: 0 },
   { symbol: 'GOLD', name: 'Gold Spot (USD)', region: 'Global', value: 3348.5, changePct: 0 },
 ];
+
+const EQUITY_ANCHORS: EquityQuote[] = [
+  { ticker: 'AAPL', name: 'Apple Inc.', assetType: 'Stock', currency: 'USD', price: 214.9, changePct: 0 },
+  { ticker: 'TSLA', name: 'Tesla Inc.', assetType: 'Stock', currency: 'USD', price: 312.4, changePct: 0 },
+  { ticker: 'VOO', name: 'S&P 500 ETF', assetType: 'ETF', currency: 'USD', price: 571.3, changePct: 0 },
+  { ticker: 'STX40', name: 'JSE Top 40 ETF', assetType: 'ETF', currency: 'ZAR', price: 96.2, changePct: 0 },
+  { ticker: 'ISF', name: 'FTSE 100 ETF', assetType: 'ETF', currency: 'GBP', price: 8.61, changePct: 0 },
+  { ticker: 'ETH', name: 'Ethereum (USD)', assetType: 'Crypto', currency: 'USD', price: 3405, changePct: 0 },
+];
+
+function tickWobble(phase: number): number {
+  return Math.sin(phase) * 0.006 + Math.sin(phase * 0.31) * 0.004;
+}
+
+/**
+ * Live stock/share ticker board (Apple, Tesla, S&P 500 ETF, JSE Top 40 ETF,
+ * FTSE 100 ETF, ETH), deterministic per tick like the index board.
+ */
+export function getEquityQuotes(rates: FxRates): EquityQuote[] {
+  return EQUITY_ANCHORS.map((anchor, i) => {
+    const phase = rates.tick * 0.7 + i * 1.9 + 4.1;
+    const price = anchor.price * (1 + tickWobble(phase));
+    const prevPrice = anchor.price * (1 + tickWobble(phase - 0.7));
+    return {
+      ...anchor,
+      price,
+      changePct: ((price - prevPrice) / prevPrice) * 100,
+    };
+  });
+}
 
 /**
  * Deterministic pseudo-random index quotes derived from the tick counter so

@@ -1,15 +1,24 @@
 import React, { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Activity, ArrowDownRight, ArrowUpRight, Radio } from 'lucide-react-native';
+import {
+  Activity,
+  ArrowDownRight,
+  ArrowUpRight,
+  PieChart,
+  Radio,
+} from 'lucide-react-native';
 
 import { useApp } from '../context/AppContext';
 import {
+  convert,
+  getEquityQuotes,
   getFxPairQuotes,
   getMarketIndices,
   POLL_INTERVAL_MS,
 } from '../utils/fxEngine';
 import { getAdviceSignals } from '../utils/advisor';
-import { formatMoney, formatPct } from '../utils/currencies';
+import { computeTargetSplit } from '../utils/splitEngine';
+import { formatMoney, formatPct, symbolFor } from '../utils/currencies';
 import AdviceCard from '../components/AdviceCard';
 import { colors, radius, spacing, typography } from '../theme';
 
@@ -18,10 +27,19 @@ export default function AdvisoryScreen() {
 
   const fxPairs = useMemo(() => getFxPairQuotes(rates), [rates]);
   const indices = useMemo(() => getMarketIndices(rates), [rates]);
+  const equities = useMemo(() => getEquityQuotes(rates), [rates]);
   const signals = useMemo(
     () => getAdviceSignals(profile, baseCurrency, rates),
     [profile, baseCurrency, rates]
   );
+  const targetSplit = useMemo(
+    () => computeTargetSplit(profile, baseCurrency, rates),
+    [profile, baseCurrency, rates]
+  );
+  const profileLabel =
+    profile.riskTolerance === 'TaxOptimised'
+      ? 'Tax-Optimised'
+      : `${profile.riskTolerance} risk`;
 
   const lastUpdated = new Date(rates.updatedAt).toLocaleTimeString();
 
@@ -58,6 +76,57 @@ export default function AdvisoryScreen() {
                   ]}
                 >
                   {formatPct(quote.changePct, 3)}
+                </Text>
+              </View>
+            </View>
+          );
+        })}
+      </View>
+
+      <Text style={styles.sectionTitle}>Stocks & shares</Text>
+      <View style={styles.grid}>
+        {equities.map((equity) => {
+          const up = equity.changePct >= 0;
+          const priceInBase = convert(
+            equity.price,
+            equity.currency,
+            baseCurrency,
+            rates
+          );
+          return (
+            <View key={equity.ticker} style={styles.gridCell}>
+              <View style={styles.indexHeader}>
+                <Activity size={12} color={colors.textFaint} />
+                <Text style={styles.indexRegion}>
+                  {equity.assetType} · {equity.currency}
+                </Text>
+              </View>
+              <Text style={styles.pairName}>
+                {equity.ticker} — {equity.name}
+              </Text>
+              <Text style={styles.pairRate}>
+                {symbolFor(equity.currency)}
+                {equity.price.toLocaleString('en-US', {
+                  maximumFractionDigits: 2,
+                  minimumFractionDigits: 2,
+                })}
+              </Text>
+              <View style={styles.changeRow}>
+                {up ? (
+                  <ArrowUpRight size={14} color={colors.positive} />
+                ) : (
+                  <ArrowDownRight size={14} color={colors.negative} />
+                )}
+                <Text
+                  style={[
+                    styles.changeText,
+                    { color: up ? colors.positive : colors.negative },
+                  ]}
+                >
+                  {formatPct(equity.changePct, 2)}
+                </Text>
+                <Text style={styles.baseEquivalent}>
+                  ≈ {formatMoney(priceInBase, baseCurrency, { compact: true })}
                 </Text>
               </View>
             </View>
@@ -104,13 +173,37 @@ export default function AdvisoryScreen() {
       <View style={styles.adviceHeader}>
         <Text style={styles.sectionTitle}>Personalized advice</Text>
         <Text style={styles.adviceMeta}>
-          {profile.riskTolerance} risk ·{' '}
+          {profileLabel} ·{' '}
           {formatMoney(profile.cashReserves, profile.cashCurrency, {
             compact: true,
           })}{' '}
           investable cash
         </Text>
       </View>
+
+      <View style={styles.strategyCard}>
+        <View style={styles.strategyHeader}>
+          <PieChart size={18} color={colors.accent} />
+          <Text style={styles.strategyTitle}>
+            Your 4-way split — {profileLabel}
+          </Text>
+        </View>
+        <View style={styles.strategySplits}>
+          {targetSplit.slices.map((slice) => (
+            <View key={slice.assetClass} style={styles.strategySlice}>
+              <Text style={styles.strategyPct}>{slice.pct.toFixed(0)}%</Text>
+              <Text style={styles.strategyLabel} numberOfLines={2}>
+                {slice.label}
+              </Text>
+              <Text style={styles.strategyAmount}>
+                {formatMoney(slice.amount, baseCurrency, { compact: true })}
+              </Text>
+            </View>
+          ))}
+        </View>
+        <Text style={styles.strategyText}>{targetSplit.strategy}</Text>
+      </View>
+
       <View style={styles.adviceList}>
         {signals.map((signal) => (
           <AdviceCard
@@ -212,5 +305,65 @@ const styles = StyleSheet.create({
   },
   adviceList: {
     gap: spacing.md,
+  },
+  baseEquivalent: {
+    color: colors.textFaint,
+    fontSize: typography.tiny,
+    marginLeft: spacing.xs,
+  },
+  strategyCard: {
+    backgroundColor: colors.accentSoft,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  strategyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  strategyTitle: {
+    color: colors.text,
+    fontSize: typography.body,
+    fontWeight: '800',
+    flex: 1,
+  },
+  strategySplits: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  strategySlice: {
+    flexGrow: 1,
+    flexBasis: 130,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    gap: 2,
+  },
+  strategyPct: {
+    color: colors.accent,
+    fontSize: 19,
+    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
+  },
+  strategyLabel: {
+    color: colors.text,
+    fontSize: typography.small,
+    fontWeight: '700',
+  },
+  strategyAmount: {
+    color: colors.textFaint,
+    fontSize: typography.small,
+    fontVariant: ['tabular-nums'],
+  },
+  strategyText: {
+    color: colors.textMuted,
+    fontSize: typography.body,
+    lineHeight: 20,
   },
 });

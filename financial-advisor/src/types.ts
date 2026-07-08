@@ -1,8 +1,15 @@
 export type CurrencyCode = 'USD' | 'ZAR' | 'GBP';
 
-export type AssetType = 'Stock' | 'Bond' | 'Crypto';
+export type AssetType = 'Stock' | 'ETF' | 'Crypto' | 'Bond' | 'Cash';
 
-export type RiskTolerance = 'Low' | 'Medium' | 'High';
+/**
+ * The four core asset classes of the split engine. Ledger asset types map
+ * onto these: Stock → Stocks, ETF → Shares, Crypto → Crypto, and both Bond
+ * and Cash → FixedIncome.
+ */
+export type AssetClass = 'Stocks' | 'Shares' | 'Crypto' | 'FixedIncome';
+
+export type RiskTolerance = 'Low' | 'Medium' | 'High' | 'TaxOptimised';
 
 export type TaxJurisdiction = 'US_IRS' | 'SA_SARS' | 'UK_HMRC';
 
@@ -114,11 +121,43 @@ export interface AdviceSignal {
   id: string;
   title: string;
   ticker: string;
-  assetType: AssetType | 'Cash' | 'ETF';
+  assetType: AssetType;
   action: 'Buy' | 'Hold' | 'Reduce' | 'Accumulate';
   currency: CurrencyCode;
   targetAllocationPct: number;
   suggestedAmount: number;
   rationale: string;
   riskMatch: RiskTolerance;
+}
+
+export interface EquityQuote {
+  ticker: string;
+  name: string;
+  assetType: AssetType;
+  currency: CurrencyCode;
+  price: number;
+  changePct: number;
+}
+
+export interface SplitSlice {
+  assetClass: AssetClass;
+  label: string;
+  pct: number;
+  amount: number;
+}
+
+export interface WrapperContribution {
+  name: string;
+  cap: number;
+  contribution: number;
+  currency: CurrencyCode;
+}
+
+export interface FourWaySplit {
+  profile: RiskTolerance;
+  baseCurrency: CurrencyCode;
+  investableCash: number;
+  slices: SplitSlice[];
+  wrapper: WrapperContribution | null;
+  strategy: string;
 }

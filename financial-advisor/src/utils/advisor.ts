@@ -134,6 +134,68 @@ const RECOMMENDATIONS: Record<RiskTolerance, RecommendationTemplate[]> = {
       minCashUsd: 25,
     },
   ],
+  TaxOptimised: [
+    {
+      title: 'Tax-Free Wrapper Index Fund',
+      ticker: 'TFSA/ISA/ROTH',
+      assetType: 'ETF',
+      action: 'Buy',
+      currency: 'USD',
+      targetAllocationPct: 45,
+      rationale:
+        'Fill this year\'s tax-free wrapper allowance first — SA TFSA (R36,000), UK ISA (£20,000) or US Roth IRA — so every unit of growth compounds free of capital gains and dividend tax.',
+      riskMatch: 'TaxOptimised',
+      minCashUsd: 25,
+    },
+    {
+      title: 'Global Index ETF (taxable account)',
+      ticker: 'VT',
+      assetType: 'ETF',
+      action: 'Accumulate',
+      currency: 'USD',
+      targetAllocationPct: 20,
+      rationale:
+        'Once the wrapper is full, low-turnover index ETFs keep taxable distributions minimal and defer gains until you choose to realise them.',
+      riskMatch: 'TaxOptimised',
+      minCashUsd: 100,
+    },
+    {
+      title: 'Blue-Chip Dividend Stocks',
+      ticker: 'DIVCORE',
+      assetType: 'Stock',
+      action: 'Accumulate',
+      currency: 'USD',
+      targetAllocationPct: 15,
+      rationale:
+        'Quality dividend payers use dividend allowances and lower dividend tax rates while adding steady equity growth outside the wrapper.',
+      riskMatch: 'TaxOptimised',
+      minCashUsd: 100,
+    },
+    {
+      title: 'Government Bonds / Money Market',
+      ticker: 'GOVT',
+      assetType: 'Bond',
+      action: 'Hold',
+      currency: 'USD',
+      targetAllocationPct: 15,
+      rationale:
+        'A bond and cash sleeve stabilises the plan and parks next year\'s wrapper contribution so it is ready on the first day of the new tax year.',
+      riskMatch: 'TaxOptimised',
+      minCashUsd: 50,
+    },
+    {
+      title: 'Bitcoin (small satellite)',
+      ticker: 'BTC',
+      assetType: 'Crypto',
+      action: 'Accumulate',
+      currency: 'USD',
+      targetAllocationPct: 5,
+      rationale:
+        'A capped crypto sleeve keeps upside in the plan; hold long-term so gains fall under annual CGT exclusions where available.',
+      riskMatch: 'TaxOptimised',
+      minCashUsd: 25,
+    },
+  ],
   High: [
     {
       title: 'Nasdaq 100 Growth ETF',
@@ -277,6 +339,7 @@ const EXPECTED_ANNUAL_RETURN: Record<RiskTolerance, number> = {
   Low: 0.055,
   Medium: 0.085,
   High: 0.125,
+  TaxOptimised: 0.08,
 };
 
 /**
