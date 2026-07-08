@@ -1,0 +1,15 @@
+{
+  "name": "eucharisteo-advisor-sync-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "LAN hub for the Eucharisteo Financial Advisor: real-time multi-device sync, live quote relay (Yahoo Finance) and automatic Obsidian vault mirroring.",
+  "type": "module",
+  "engines": { "node": ">=18" },
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

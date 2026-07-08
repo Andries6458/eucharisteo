@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="description" content="Eucharisteo Trading — private multi-currency financial advisor: portfolio, top movers, allocation and tax.">
+  <meta name="theme-color" content="#0a0e1a">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Eucharisteo Trading — Financial Advisor</title>
+
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+  <link rel="icon" type="image/png" href="assets/icons/icon-192.png">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="brand">
+      <img src="assets/icons/icon-192.png" alt="">
+      <div class="brand-text">
+        <b>Eucharisteo Trading</b>
+        <small>Financial Advisor</small>
+      </div>
+    </div>
+    <div class="topbar-spacer"></div>
+    <span id="data-badge" class="badge badge-sim" title="Where market prices come from">Simulated</span>
+    <span id="sync-badge" class="badge badge-sync-off" title="PC / multi-device sync status">Sync off</span>
+    <div class="ccy-switch" id="ccy-switch" role="group" aria-label="Base currency">
+      <button data-ccy="USD">$ USD</button>
+      <button data-ccy="ZAR">R ZAR</button>
+      <button data-ccy="GBP">£ GBP</button>
+    </div>
+  </header>
+
+  <main class="wrap">
+
+    <!-- ============ DASHBOARD ============ -->
+    <section id="screen-dashboard" class="screen">
+      <div class="eyebrow">Dashboard</div>
+      <h2 class="section-title">Portfolio</h2>
+
+      <div class="card" style="margin-bottom:1rem">
+        <div class="hero-value" id="networth">—</div>
+        <div class="hero-sub" id="networth-sub"></div>
+        <div class="stat-row" id="ccy-stats"></div>
+      </div>
+
+      <div class="card" style="margin-bottom:1rem">
+        <h3>Value over time <span class="spacer"></span><span class="muted" id="fx-note" style="font-size:.72rem;font-weight:400"></span></h3>
+        <div id="history-chart"></div>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <h3>Wallets <span class="spacer"></span><button class="btn btn-sm" id="add-wallet">+ Wallet</button></h3>
+          <div class="rowlist" id="wallet-list"></div>
+        </div>
+        <div class="card">
+          <h3>Holdings <span class="spacer"></span><button class="btn btn-sm" id="add-holding">+ Holding</button></h3>
+          <div class="rowlist" id="holding-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ MOVERS ============ -->
+    <section id="screen-movers" class="screen hidden">
+      <div class="eyebrow">Markets</div>
+      <h2 class="section-title">Top movers</h2>
+
+      <div class="tabs" id="market-tabs">
+        <button class="tab active" data-market="ALL">All markets</button>
+        <button class="tab" data-market="S&amp;P 500">S&amp;P 500</button>
+        <button class="tab" data-market="JSE">JSE</button>
+        <button class="tab" data-market="FTSE">FTSE</button>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <h3>▲ Top 5 gainers</h3>
+          <div class="rowlist" id="gainers"></div>
+        </div>
+        <div class="card">
+          <h3>▼ Top 5 losers</h3>
+          <div class="rowlist" id="losers"></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:1rem">
+        <h3>Volume spikes <span class="spacer"></span><span class="muted" style="font-size:.72rem;font-weight:400">≥2× average volume</span></h3>
+        <div class="rowlist" id="spikes"></div>
+      </div>
+
+      <p class="note" style="margin-top:.8rem" id="movers-note"></p>
+    </section>
+
+    <!-- ============ ALLOCATION ============ -->
+    <section id="screen-allocation" class="screen hidden">
+      <div class="eyebrow">Strategy</div>
+      <h2 class="section-title">4-way allocation</h2>
+
+      <div class="tabs" id="profile-tabs">
+        <button class="tab" data-profile="aggressive">Aggressive</button>
+        <button class="tab" data-profile="balanced">Balanced</button>
+        <button class="tab" data-profile="conservative">Conservative</button>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <h3>Current split</h3>
+          <div id="alloc-donut"></div>
+        </div>
+        <div class="card">
+          <h3>Actual vs target</h3>
+          <div id="alloc-drift"></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:1rem">
+        <h3>Rebalancing plan</h3>
+        <div class="table-scroll">
+          <table class="data" id="rebalance-table">
+            <thead><tr><th>Bucket</th><th>Actual</th><th>Target</th><th class="right">Value</th><th class="right">Move</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="note" style="margin-top:.6rem">Live wallet balances are included — cash counts toward its wallet's bucket (Low risk by default).</p>
+      </div>
+    </section>
+
+    <!-- ============ ADVISOR ============ -->
+    <section id="screen-advisor" class="screen hidden">
+      <div class="eyebrow">Advisory</div>
+      <h2 class="section-title">Advisor &amp; tax</h2>
+
+      <div class="card" style="margin-bottom:1rem">
+        <h3>Recommendations</h3>
+        <div id="recs"></div>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <h3>Your tax inputs</h3>
+          <div class="field">
+            <label for="tax-residency">Tax residency</label>
+            <select id="tax-residency"></select>
+          </div>
+          <div class="field">
+            <label for="annual-income">Annual taxable income (residency currency)</label>
+            <input id="annual-income" type="number" min="0" step="1000" inputmode="numeric">
+          </div>
+          <div id="tax-extra-fields"></div>
+        </div>
+        <div class="card">
+          <h3>Tax position</h3>
+          <div id="tax-detail"></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:1rem">
+        <h3>Obsidian vault</h3>
+        <p class="note" style="margin-bottom:.8rem">
+          Mirrors <b>Portfolio</b>, <b>Allocation</b>, the <b>Advisory Report</b> and a daily <b>Movers log</b>
+          as clean Markdown notes. On a PC running the sync server the vault updates automatically.
+        </p>
+        <div class="form-actions" style="justify-content:flex-start">
+          <button class="btn btn-primary" id="obsidian-write">Write to vault folder</button>
+          <button class="btn" id="obsidian-download">Download .md files</button>
+          <button class="btn btn-ghost btn-sm" id="obsidian-forget">Forget saved folder</button>
+        </div>
+        <p class="note" id="obsidian-status" style="margin-top:.6rem"></p>
+      </div>
+    </section>
+
+    <!-- ============ SETTINGS ============ -->
+    <section id="screen-settings" class="screen hidden">
+      <div class="eyebrow">Setup</div>
+      <h2 class="section-title">Settings</h2>
+
+      <div class="grid2">
+        <div class="card">
+          <h3>Preferences</h3>
+          <div class="field">
+            <label for="set-base">Base currency</label>
+            <select id="set-base">
+              <option value="USD">$ USD — US Dollar</option>
+              <option value="ZAR">R ZAR — SA Rand</option>
+              <option value="GBP">£ GBP — British Pound</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="set-profile">Risk profile</label>
+            <select id="set-profile">
+              <option value="aggressive">Aggressive (45/30/10/15)</option>
+              <option value="balanced">Balanced (25/35/20/20)</option>
+              <option value="conservative">Conservative (10/25/40/25)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="set-finnhub">Finnhub API key (optional — live US quotes without the PC hub)</label>
+            <input id="set-finnhub" type="password" autocomplete="off" placeholder="paste key from finnhub.io">
+          </div>
+          <p class="note">Without live sources the app runs on clearly-labelled simulated prices, so every screen keeps working offline.</p>
+        </div>
+
+        <div class="card">
+          <h3>PC &amp; multi-device sync</h3>
+          <div class="field">
+            <label for="set-sync">Sync server address (PC on your Wi-Fi)</label>
+            <input id="set-sync" type="text" placeholder="192.168.1.20:8765" autocomplete="off">
+          </div>
+          <div class="form-actions" style="justify-content:flex-start">
+            <button class="btn btn-primary" id="sync-connect">Connect</button>
+            <button class="btn" id="sync-disconnect">Disconnect</button>
+          </div>
+          <p class="note" id="sync-status-note" style="margin-top:.6rem">Not connected.</p>
+          <p class="note" style="margin-top:.6rem">
+            Run the hub on your PC: <code>cd advisor/sync-server && npm install && npm start</code>.
+            It relays live quotes, syncs every device on the network in real time and can
+            auto-write your Obsidian vault.
+          </p>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:1rem">
+        <h3>Backup</h3>
+        <div class="form-actions" style="justify-content:flex-start">
+          <button class="btn" id="backup-export">Export JSON backup</button>
+          <button class="btn" id="backup-import">Import JSON backup</button>
+          <input id="backup-file" type="file" accept="application/json" class="hidden">
+        </div>
+        <p class="note" style="margin-top:.6rem">
+          Data lives on this device (and your own PC hub when syncing). Nothing is sent to any third-party server.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============ BOTTOM NAV ============ -->
+  <nav class="bottomnav" id="nav">
+    <button data-screen="dashboard" class="active" aria-label="Dashboard">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12 12 3l9 9"/><path d="M5 10v10h14V10"/></svg>
+      Dashboard
+    </button>
+    <button data-screen="movers" aria-label="Movers">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 17 6-6 4 4 8-8"/><path d="M21 7v6h-6"/></svg>
+      Movers
+    </button>
+    <button data-screen="allocation" aria-label="Allocation">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 3v9l6.5 6.2"/></svg>
+      Allocation
+    </button>
+    <button data-screen="advisor" aria-label="Advisor">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3 2 8l10 5 10-5-10-5Z"/><path d="M5 10v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/></svg>
+      Advisor
+    </button>
+    <button data-screen="settings" aria-label="Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.2a1.7 1.7 0 0 0 1 1.5h.1a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.5 1h.2a2 2 0 1 1 0 4h-.2a1.7 1.7 0 0 0-1.5 1Z"/></svg>
+      Settings
+    </button>
+  </nav>
+
+  <!-- ============ MODAL ============ -->
+  <div id="modal-backdrop" class="modal-backdrop hidden">
+    <div class="modal" role="dialog" aria-modal="true">
+      <h3 id="modal-title">Edit</h3>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <div id="toast" role="status"></div>
+
+  <script type="module" src="assets/js/app.js"></script>
+</body>
+</html>

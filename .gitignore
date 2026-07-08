@@ -14,3 +14,6 @@ desktop.ini
 # Local dev
 .claude/
 node_modules/
+
+# Advisor sync hub runtime state
+advisor/sync-server/state.json
