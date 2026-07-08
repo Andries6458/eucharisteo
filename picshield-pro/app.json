@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "PicShield Pro",
+    "slug": "picshield-pro",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "backgroundColor": "#0A0F1C",
+    "assetBundlePatterns": ["**/*"],
+    "splash": {
+      "backgroundColor": "#0A0F1C",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.eucharisteo.picshieldpro",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "PicShield Pro reads photos you select so it can inventory and permanently strip their EXIF and GPS metadata on-device.",
+        "NSPhotoLibraryAddUsageDescription": "PicShield Pro saves cleaned, metadata-free copies of your photos.",
+        "LSSupportsOpeningDocumentsInPlace": true,
+        "UIFileSharingEnabled": true
+      }
+    },
+    "android": {
+      "package": "com.eucharisteo.picshieldpro",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#0A0F1C"
+      },
+      "permissions": [
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.INTERNET"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "name": "PicShield Pro"
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "PicShield Pro reads photos you select so it can strip their EXIF and GPS metadata on-device."
+        }
+      ]
+    ]
+  }
+}
