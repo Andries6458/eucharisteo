@@ -2,9 +2,21 @@
    monotonically increasing revision used by the LAN sync's last-write-wins.
    Subscribers re-render on every mutation. */
 
-import { STORAGE_KEY, FALLBACK_FX, CURRENCIES, BUCKETS } from './config.js';
+import { STORAGE_KEY, FALLBACK_FX, CURRENCIES, BUCKETS, RESIDENCIES, RISK_PROFILES } from './config.js';
+import { isValidRateTable } from './fx.js';
 
 const fin = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+
+const RESIDENCY_CODES = RESIDENCIES.map((r) => r.code);
+const PROFILE_KEYS = Object.keys(RISK_PROFILES);
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/* The user's local calendar day as YYYY-MM-DD (history keys, note titles). */
+export function localDay(d = new Date()) {
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
 
 export function defaultState() {
   return {
@@ -54,8 +66,8 @@ export function sanitiseState(raw) {
   // so a bad sync peer or imported backup can never inject markup or NaN
   const settings = {
     baseCurrency: CURRENCIES.includes(merged.baseCurrency) ? merged.baseCurrency : 'USD',
-    taxResidency: ['US', 'ZA', 'UK'].includes(merged.taxResidency) ? merged.taxResidency : 'ZA',
-    riskProfile: ['aggressive', 'balanced', 'conservative'].includes(merged.riskProfile) ? merged.riskProfile : 'balanced',
+    taxResidency: RESIDENCY_CODES.includes(merged.taxResidency) ? merged.taxResidency : 'ZA',
+    riskProfile: PROFILE_KEYS.includes(merged.riskProfile) ? merged.riskProfile : 'balanced',
     filingStatus: ['single', 'married_joint'].includes(merged.filingStatus) ? merged.filingStatus : 'single',
     annualIncome: fin(merged.annualIncome),
     age: fin(merged.age) || 40,
@@ -88,10 +100,20 @@ export function sanitiseState(raw) {
       acquiredAt: h.acquiredAt || null,
     })),
     history: Array.isArray(raw.history)
-      ? raw.history.filter((p) => p && typeof p.t === 'string' && Number.isFinite(p.value)).slice(-730)
+      ? raw.history.filter((p) => p && typeof p.t === 'string' && DAY_RE.test(p.t) && Number.isFinite(p.value)).slice(-730)
       : [],
   };
-  if (!s.fx?.rates || !Number.isFinite(s.fx.rates.ZAR)) s.fx = { ...FALLBACK_FX, rates: { ...FALLBACK_FX.rates } };
+  // a synced/imported FX table must satisfy the same invariants convert() enforces
+  if (!isValidRateTable(s.fx?.rates)) {
+    s.fx = { ...FALLBACK_FX, rates: { ...FALLBACK_FX.rates } };
+  } else {
+    s.fx = {
+      base: 'USD',
+      rates: { USD: 1, ZAR: s.fx.rates.ZAR, GBP: s.fx.rates.GBP },
+      asOf: String(s.fx.asOf || ''),
+      source: String(s.fx.source || 'unknown'),
+    };
+  }
   return s;
 }
 
@@ -148,15 +170,18 @@ export function createStore(storage = globalThis.localStorage) {
       return true;
     },
 
-    /* Daily portfolio-value snapshot (USD) for the line graph. */
+    /* Daily portfolio-value snapshot (USD) for the line graph.
+       Keyed to the user's LOCAL day. Deliberately rev-neutral and flagged
+       'local-snapshot' so automatic snapshots neither race user edits in the
+       sync last-write-wins nor spam peers every poll tick. */
     snapshot(valueUSD) {
       if (!Number.isFinite(valueUSD)) return;
-      const t = new Date().toISOString().slice(0, 10);
-      this.update((s) => {
-        const hist = s.history.filter((p) => p.t !== t);
-        hist.push({ t, value: valueUSD });
-        s.history = hist.slice(-730);
-      }, { silentSnapshot: true });
+      const t = localDay();
+      const hist = state.history.filter((p) => p.t !== t);
+      hist.push({ t, value: valueUSD });
+      state = sanitiseState({ ...state, history: hist.slice(-730) }) || state;
+      persist();
+      emit({ origin: 'local-snapshot' });
     },
 
     replaceAll(raw) {

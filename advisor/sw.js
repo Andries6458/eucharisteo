@@ -17,6 +17,7 @@ const ASSETS = [
   './assets/js/obsidian.js',
   './assets/js/vault-md.js',
   './assets/js/charts.js',
+  './assets/js/tax/brackets.js',
   './assets/js/tax/us.js',
   './assets/js/tax/za.js',
   './assets/js/tax/uk.js',
@@ -45,23 +46,26 @@ self.addEventListener('fetch', (e) => {
 
   // our own app shell: NETWORK-FIRST so new deploys show up immediately,
   // falling back to cache when offline
+  // only successful full responses may overwrite the cached app shell —
+  // a transient 404/500 must never poison the offline copy
+  const cacheIfOk = (r) => {
+    if (r.ok && r.status !== 206) {
+      const copy = r.clone();
+      caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+    }
+    return r;
+  };
+
   if (url.origin === location.origin) {
     e.respondWith(
-      fetch(req).then((r) => {
-        const copy = r.clone();
-        caches.open(CACHE).then((c) => c.put(req, copy));
-        return r;
-      }).catch(() => caches.match(req, { ignoreSearch: true }).then((m) => m || caches.match('./index.html')))
+      fetch(req).then(cacheIfOk)
+        .catch(() => caches.match(req, { ignoreSearch: true }).then((m) => m || caches.match('./index.html')))
     );
     return;
   }
 
   // third-party static assets (fonts): cache-first
   e.respondWith(
-    caches.match(req).then((m) => m || fetch(req).then((r) => {
-      const copy = r.clone();
-      caches.open(CACHE).then((c) => c.put(req, copy));
-      return r;
-    }))
+    caches.match(req).then((m) => m || fetch(req).then(cacheIfOk))
   );
 });

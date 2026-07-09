@@ -3,6 +3,8 @@
    preferential long-term capital-gains brackets with income stacking,
    the standard deduction and the 3.8% Net Investment Income Tax. */
 
+import { clampMoney, bracketTax, marginalRate } from './brackets.js';
+
 export const US_TAX_YEAR = 2025;
 
 export const STANDARD_DEDUCTION = { single: 15_750, married_joint: 31_500 };
@@ -30,29 +32,6 @@ export const NIIT = {
   rate: 0.038,
   magiThreshold: { single: 200_000, married_joint: 250_000 },
 };
-
-const clampMoney = (v) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0);
-
-function bracketTax(taxable, brackets) {
-  let tax = 0;
-  let lower = 0;
-  const bands = [];
-  for (const [upper, rate] of brackets) {
-    if (taxable <= lower) break;
-    const slice = Math.min(taxable, upper) - lower;
-    if (slice > 0) {
-      tax += slice * rate;
-      bands.push({ from: lower, to: Math.min(taxable, upper), rate, tax: slice * rate });
-    }
-    lower = upper;
-  }
-  return { tax, bands };
-}
-
-function marginalRate(taxable, brackets) {
-  for (const [upper, rate] of brackets) if (taxable <= upper) return rate;
-  return brackets[brackets.length - 1][1];
-}
 
 /* Tax on ordinary taxable income (after deductions). */
 export function ordinaryTax(taxableIncome, filingStatus = 'single') {

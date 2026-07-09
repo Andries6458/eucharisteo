@@ -57,6 +57,34 @@ test('store: settings are hard-typed against injection from peers/backups', () =
   assert.equal(clean.isaContributed, 0);
 });
 
+test('store: history labels must be YYYY-MM-DD — markup is dropped (XSS hardening)', () => {
+  const dirty = defaultState();
+  dirty.history = [
+    { t: '2026-<img src=x onerror=alert(1)>', value: 1 },
+    { t: '2026-07-08', value: 2 },
+    { t: 12345, value: 3 },
+  ];
+  const clean = sanitiseState(dirty);
+  assert.deepEqual(clean.history, [{ t: '2026-07-08', value: 2 }]);
+});
+
+test('store: an invalid synced FX table is replaced by the pinned fallback', () => {
+  const dirty = defaultState();
+  dirty.fx = { rates: { ZAR: 18.1 } }; // missing USD/GBP — convert() would throw
+  const clean = sanitiseState(dirty);
+  assert.deepEqual(clean.fx.rates, FALLBACK_FX.rates);
+  const bad2 = { ...defaultState(), fx: { rates: { USD: 2, ZAR: 18, GBP: 0.8 } } };
+  assert.deepEqual(sanitiseState(bad2).fx.rates, FALLBACK_FX.rates);
+});
+
+test('store: snapshots are rev-neutral so they never race user edits over sync', () => {
+  const store = createStore(memStorage());
+  const rev0 = store.get().rev;
+  store.snapshot(1234);
+  assert.equal(store.get().rev, rev0);
+  assert.equal(store.get().history.length, 1);
+});
+
 test('store: update bumps rev and persists', () => {
   const storage = memStorage();
   const store = createStore(storage);

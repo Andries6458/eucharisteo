@@ -6,7 +6,13 @@
 
 const RECONNECT_BASE_MS = 2_000;
 const RECONNECT_MAX_MS = 60_000;
-const QUOTE_TIMEOUT_MS = 8_000;
+/* The hub may fan out ~25 Yahoo chart fetches on a cold cache — give it time. */
+const QUOTE_TIMEOUT_MS = 20_000;
+
+/* Device-local secrets must never reach the hub's disk or other peers. */
+function redactState(state) {
+  return { ...state, settings: { ...state.settings, finnhubKey: '', syncUrl: '' } };
+}
 
 /* Accepts "192.168.1.20", "192.168.1.20:8765", "ws://host:8765" or
    "wss://host". Returns a normalised ws URL or null. */
@@ -73,7 +79,7 @@ export function createSyncClient(store, { onStatus = () => {}, WebSocketImpl = g
       attempts = 0;
       const s = store.get();
       send({ type: 'hello', deviceId: s.deviceId, rev: s.rev });
-      send({ type: 'state', state: s });
+      send({ type: 'state', state: redactState(s) });
       status('connected');
     };
     ws.onmessage = handleMessage;
@@ -104,9 +110,10 @@ export function createSyncClient(store, { onStatus = () => {}, WebSocketImpl = g
     }
   }
 
-  // push local changes (remote-origin changes must not echo back)
+  // push local edits only: remote-origin changes must not echo back, and
+  // automatic per-tick snapshots ('local-snapshot') stay on-device
   store.subscribe((state, meta) => {
-    if (meta.origin === 'local') send({ type: 'state', state });
+    if (meta.origin === 'local') send({ type: 'state', state: redactState(state) });
   });
 
   return {

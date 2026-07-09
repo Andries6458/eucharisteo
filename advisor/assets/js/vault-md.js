@@ -5,10 +5,11 @@
 
 import { BUCKET_META, BUCKETS, CURRENCY_META } from './config.js';
 import { fmtMoney, fmtPct } from './fx.js';
+import { localDay } from './store.js';
 
 export const VAULT_FOLDER = 'Eucharisteo Advisor';
 
-const today = (d = new Date()) => d.toISOString().slice(0, 10);
+const today = () => localDay();
 
 function fm(fields) {
   const lines = Object.entries(fields).map(([k, v]) => `${k}: ${Array.isArray(v) ? `[${v.join(', ')}]` : v}`);

@@ -6,7 +6,8 @@ import { convert, fmtMoney, fmtPct, fetchRates } from './fx.js';
 import { startPolling } from './market.js';
 import { byMarket, rankMovers, volumeSpikes } from './movers.js';
 import { buildReport } from './advisor.js';
-import { createStore, makeId } from './store.js';
+import { createStore, makeId, localDay } from './store.js';
+import { holdingValue } from './allocation.js';
 import { createSyncClient, normaliseSyncUrl } from './sync.js';
 import { lineChart, allocationDonut, sparkline, driftBars } from './charts.js';
 import { writeVault, downloadVault, forgetVault, supportsDirectoryPicker, savedVault } from './obsidian.js';
@@ -60,7 +61,11 @@ async function boot() {
   wireAdvisor();
   wireSettings();
 
-  store.subscribe(() => renderAll());
+  // automatic snapshots re-render via the poll callback below; everything
+  // else re-renders through this subscription — one render per change
+  store.subscribe((state, meta) => {
+    if (meta.origin !== 'local-snapshot') renderAll();
+  });
   renderAll();
 
   // live FX now and on an interval
@@ -72,8 +77,9 @@ async function boot() {
     UNIVERSE.map((u) => u.symbol),
     (quotes) => {
       latestQuotes = quotes;
-      recordSnapshot();
-      renderAll();
+      const report = currentReport(); // built once, shared by snapshot + render
+      recordSnapshot(report);
+      renderAll(report);
     },
     () => ({
       relay: sync.isConnected() ? sync : null,
@@ -104,11 +110,10 @@ function currentReport() {
   return buildReport(store.get(), latestQuotes, store.get().fx);
 }
 
-function recordSnapshot() {
+function recordSnapshot(report) {
   const state = store.get();
-  const report = buildReport(state, latestQuotes, state.fx);
   const usd = convert(report.netWorth, report.base, 'USD', state.fx.rates);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDay();
   const existing = state.history.find((p) => p.t === today);
   if (!existing || Math.abs(existing.value - usd) > Math.max(1, usd * 0.001)) {
     store.snapshot(usd);
@@ -200,9 +205,7 @@ function renderDashboard(report) {
   const quotesBySymbol = new Map(latestQuotes.map((q) => [q.symbol, q]));
   $('#holding-list').innerHTML = state.holdings.map((h) => {
     const q = quotesBySymbol.get(h.symbol);
-    const price = q && q.price > 0 ? q.price : h.avgCost;
-    const ccy = q?.currency || h.currency;
-    const val = convert(h.units * price, ccy, base, state.fx.rates);
+    const val = holdingValue(h, quotesBySymbol, state.fx.rates, base);
     const chg = q?.changePct;
     const pill = chg == null ? '<span class="pill pill-flat">—</span>'
       : `<span class="pill ${chg >= 0 ? 'pill-gain' : 'pill-loss'}">${chg >= 0 ? '▲' : '▼'} ${fmtPct(chg)}</span>`;
@@ -590,8 +593,7 @@ function holdingModal(holding = null) {
 
 /* ---------- master render ---------- */
 
-function renderAll() {
-  const report = currentReport();
+function renderAll(report = currentReport()) {
   const base = report.base;
   $$('#ccy-switch button').forEach((b) => b.classList.toggle('active', b.dataset.ccy === base));
   renderBadges();

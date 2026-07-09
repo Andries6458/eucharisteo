@@ -3,6 +3,8 @@
    capital gains (40% inclusion + annual exclusion), the interest exemption,
    dividends withholding tax and TFSA contribution limits. */
 
+import { clampMoney, bracketTax, marginalRate as marginalRateIn } from './brackets.js';
+
 export const ZA_TAX_YEAR = '2025/26';
 
 /* Marginal brackets: [upper bound of taxable income, rate]. */
@@ -20,8 +22,6 @@ export const DIVIDENDS_WHT_RATE = 0.20;
 
 export const TFSA = { annualLimit: 36_000, lifetimeLimit: 500_000, penaltyRate: 0.40 };
 
-const clampMoney = (v) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0);
-
 export function rebateFor(age) {
   const a = typeof age === 'number' && Number.isFinite(age) ? age : 0;
   let r = REBATES.primary;
@@ -30,32 +30,14 @@ export function rebateFor(age) {
   return r;
 }
 
-function bracketTax(taxable) {
-  let tax = 0;
-  let lower = 0;
-  const bands = [];
-  for (const [upper, rate] of ZA_BRACKETS) {
-    if (taxable <= lower) break;
-    const slice = Math.min(taxable, upper) - lower;
-    if (slice > 0) {
-      tax += slice * rate;
-      bands.push({ from: lower, to: Math.min(taxable, upper), rate, tax: slice * rate });
-    }
-    lower = upper;
-  }
-  return { tax, bands };
-}
-
 export function marginalRate(taxableIncome) {
-  const taxable = clampMoney(taxableIncome);
-  for (const [upper, rate] of ZA_BRACKETS) if (taxable <= upper) return rate;
-  return ZA_BRACKETS[ZA_BRACKETS.length - 1][1];
+  return marginalRateIn(clampMoney(taxableIncome), ZA_BRACKETS);
 }
 
 /* Personal income tax after the age rebate (never below zero). */
 export function incomeTax(taxableIncome, { age = 40 } = {}) {
   const taxable = clampMoney(taxableIncome);
-  const { tax: gross, bands } = bracketTax(taxable);
+  const { tax: gross, bands } = bracketTax(taxable, ZA_BRACKETS);
   const rebate = rebateFor(age);
   const tax = Math.max(0, gross - rebate);
   return {

@@ -109,7 +109,12 @@ export function lineChart(container, points, { color = CHART_COLORS.line, height
     dot.setAttribute('cx', x(i)); dot.setAttribute('cy', y(p.value));
     dot.setAttribute('visibility', 'visible');
     tip.classList.remove('hidden');
-    tip.innerHTML = `<b>${p.t}</b><span>${formatValue(p.value)}</span>`;
+    tip.replaceChildren();
+    const tipLabel = document.createElement('b');
+    tipLabel.textContent = p.t; // textContent: labels can arrive via sync/backup
+    const tipValue = document.createElement('span');
+    tipValue.textContent = formatValue(p.value);
+    tip.append(tipLabel, tipValue);
     const tipX = Math.min(Math.max(0, (x(i) / W) * rect.width - 50), rect.width - 110);
     tip.style.left = `${tipX}px`;
     tip.style.top = `0px`;

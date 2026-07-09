@@ -34,7 +34,8 @@ const STATE_FILE = join(here, 'state.json');
 const PORT = Number(process.env.EC_ADVISOR_PORT) || SYNC_PORT;
 const VAULT_DIR = process.env.EC_ADVISOR_VAULT ? resolve(process.env.EC_ADVISOR_VAULT) : null;
 
-const QUOTE_TTL_MS = 30_000;
+/* just under the clients' 60s poll cadence so steady-state polls hit cache */
+const QUOTE_TTL_MS = 55_000;
 
 /* ---------- state persistence ---------- */
 
@@ -76,6 +77,9 @@ async function yahooQuote(symbol) {
 
   // JSE quotes come in ZAc (cents), LSE in GBp (pence) — normalise to major units
   const divisor = meta.currency === 'ZAc' || meta.currency === 'GBp' ? 100 : 1;
+  // carry the real currency so symbols outside the built-in universe don't
+  // default to USD downstream (a rand price read as dollars is ~18x off)
+  const currency = meta.currency === 'ZAc' ? 'ZAR' : meta.currency === 'GBp' ? 'GBP' : meta.currency;
 
   const ts = result.timestamp || [];
   const quoteBlock = result.indicators?.quote?.[0] || {};
@@ -92,6 +96,7 @@ async function yahooQuote(symbol) {
 
   return normalise({
     symbol,
+    currency,
     price: Number.isFinite(meta.regularMarketPrice) ? meta.regularMarketPrice / divisor : null,
     prevClose: Number.isFinite(meta.chartPreviousClose) ? meta.chartPreviousClose / divisor
       : Number.isFinite(meta.previousClose) ? meta.previousClose / divisor : null,

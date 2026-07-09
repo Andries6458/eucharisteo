@@ -174,9 +174,11 @@ export async function fetchQuotes(symbols, { relay = null, finnhubKey = '', fetc
 export function startPolling(symbols, onQuotes, getOptions = () => ({}), intervalMs = POLL_INTERVAL_MS) {
   let timer = null;
   let stopped = false;
+  let inFlight = false; // guards against forked tick chains (visibility races)
 
   async function tick() {
-    if (stopped) return;
+    if (stopped || inFlight) return;
+    inFlight = true;
     const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
     if (!hidden) {
       try {
@@ -186,14 +188,18 @@ export function startPolling(symbols, onQuotes, getOptions = () => ({}), interva
         if (typeof console !== 'undefined') console.warn('market poll failed', err);
       }
     }
-    if (!stopped) timer = setTimeout(tick, intervalMs);
+    inFlight = false;
+    if (!stopped) {
+      clearTimeout(timer);
+      timer = setTimeout(tick, intervalMs);
+    }
   }
 
   tick();
   const onVisible = () => {
     if (typeof document !== 'undefined' && document.visibilityState === 'visible' && !stopped) {
       clearTimeout(timer);
-      tick();
+      tick(); // no-ops if a fetch is already in flight; that chain reschedules
     }
   };
   if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible);

@@ -100,7 +100,7 @@ export const CHART_COLORS = {
 /* ---------- tax residencies ---------- */
 
 export const RESIDENCIES = [
-  { code: 'US', label: 'United States (IRS)' },
-  { code: 'ZA', label: 'South Africa (SARS)' },
-  { code: 'UK', label: 'United Kingdom (HMRC)' },
+  { code: 'US', label: 'United States (IRS)', currency: 'USD' },
+  { code: 'ZA', label: 'South Africa (SARS)', currency: 'ZAR' },
+  { code: 'UK', label: 'United Kingdom (HMRC)', currency: 'GBP' },
 ];

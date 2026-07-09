@@ -4,21 +4,22 @@
    currency, compares actual weights with the risk profile's ideal split,
    and produces concrete rebalancing moves. All functions are pure. */
 
-import { BUCKETS, RISK_PROFILES, DRIFT_THRESHOLD } from './config.js';
+import { BUCKETS, RISK_PROFILES, DRIFT_THRESHOLD, CURRENCIES } from './config.js';
 import { convert } from './fx.js';
 
 const fin = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 
-/* Market value of one holding in the base currency.
-   Quote price wins; avgCost is the stand-in until a quote arrives. */
+/* Market value of one holding in the base currency. Quote price wins;
+   avgCost is the stand-in until a quote arrives. The single valuation rule —
+   the dashboard, allocation and tax screens must all agree with it. */
 export function holdingValue(holding, quotesBySymbol, rates, base) {
   const units = fin(holding.units);
   if (units === 0) return 0;
   const q = quotesBySymbol?.get?.(holding.symbol) || null;
-  const price = q && typeof q.price === 'number' && Number.isFinite(q.price) && q.price > 0
-    ? q.price
-    : fin(holding.avgCost);
-  const ccy = q?.currency || holding.currency || 'USD';
+  const usableQuote = q && fin(q.price) > 0 && CURRENCIES.includes(q.currency);
+  const price = usableQuote ? q.price : fin(holding.avgCost);
+  const ccy = usableQuote ? q.currency
+    : CURRENCIES.includes(holding.currency) ? holding.currency : 'USD';
   return convert(units * price, ccy, base, rates);
 }
 

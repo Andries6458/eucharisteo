@@ -119,6 +119,10 @@ advisor/
 
 ## Notes & limits
 
+- Sync is whole-state **last-write-wins** (highest revision, then timestamp).
+  It is built for one person's devices, not simultaneous editing: if two
+  devices are edited while one is offline, the device with more edits wins
+  when it reconnects. Use the JSON backup before big reorganisations.
 - Tax figures are **estimates for planning**, not filing advice; tables live in
   `assets/js/tax/*.js` and are dated per tax year for easy annual updates.
 - Yahoo quote data comes via *your own PC* (no keys, personal use); the app

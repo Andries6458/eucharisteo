@@ -144,6 +144,16 @@ test('uk: personal allowance tapers above £100,000', () => {
   close(uk.incomeTax(110_000).tax, 33_432);
 });
 
+test('uk: additional rate starts at £125,140 of TAXABLE income (no PA double-count)', () => {
+  // £130,000: PA fully tapered, taxable 130,000 ->
+  // 37,700@20% + 87,440@40% + 4,860@45% = 44,703
+  close(uk.incomeTax(130_000).tax, 44_703);
+  // £124,000: PA 570, taxable 123,430 — still HIGHER band, PSA £500
+  assert.equal(uk.incomeTax(124_000).band, 'higher');
+  assert.equal(uk.savingsAllowance(124_000), 500);
+  assert.equal(uk.incomeTax(130_000).band, 'additional');
+});
+
 test('uk: zero and sub-allowance incomes pay nothing', () => {
   assert.equal(uk.incomeTax(0).tax, 0);
   assert.equal(uk.incomeTax(12_570).tax, 0);

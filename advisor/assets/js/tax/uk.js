@@ -3,17 +3,19 @@
    taper, capital gains (18%/24% with the £3,000 annual exempt amount),
    dividend tax and the ISA / personal savings allowances. */
 
+import { clampMoney, bracketTax } from './brackets.js';
+
 export const UK_TAX_YEAR = '2025/26';
 
 export const PERSONAL_ALLOWANCE = 12_570;
 export const PA_TAPER_THRESHOLD = 100_000; // PA shrinks £1 per £2 above this
 
-/* rUK bands applied to income above the personal allowance:
-   [upper bound of taxable-above-PA income, rate]. */
+/* rUK bands over TAXABLE (above-allowance) income, per the HMRC table:
+   basic to £37,700 · higher to £125,140 · additional above. */
 export const UK_BANDS = [
-  [37_700, 0.20],            // basic
-  [125_140 - 12_570, 0.40],  // higher (112,570 of taxable income)
-  [Infinity, 0.45],          // additional
+  [37_700, 0.20],
+  [125_140, 0.40],
+  [Infinity, 0.45],
 ];
 
 export const CGT = { annualExemptAmount: 3_000, basicRate: 0.18, higherRate: 0.24 };
@@ -23,8 +25,6 @@ export const DIVIDEND = { allowance: 500, basicRate: 0.0875, higherRate: 0.3375,
 
 export const ISA_ALLOWANCE = 20_000;
 export const PSA = { basic: 1_000, higher: 500, additional: 0 };
-
-const clampMoney = (v) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0);
 
 /* Personal allowance after the £100k taper. */
 export function personalAllowance(income) {
@@ -38,19 +38,10 @@ export function incomeTax(income) {
   const gross = clampMoney(income);
   const pa = personalAllowance(gross);
   const taxable = Math.max(0, gross - pa);
-  let tax = 0;
-  let lower = 0;
-  const bands = [];
-  for (const [upper, rate] of UK_BANDS) {
-    if (taxable <= lower) break;
-    const slice = Math.min(taxable, upper) - lower;
-    if (slice > 0) {
-      tax += slice * rate;
-      bands.push({ from: lower, to: Math.min(taxable, upper), rate, tax: slice * rate });
-    }
-    lower = upper;
-  }
-  const marginal = taxable <= 0 ? 0 : (taxable <= UK_BANDS[0][0] ? 0.20 : taxable <= UK_BANDS[1][0] ? 0.40 : 0.45);
+  const { tax, bands } = bracketTax(taxable, UK_BANDS);
+  const marginal = taxable <= 0 ? 0
+    : taxable <= UK_BANDS[0][0] ? 0.20
+    : taxable <= UK_BANDS[1][0] ? 0.40 : 0.45;
   return {
     gross, personalAllowance: pa, taxable, tax, bands,
     marginalRate: marginal,

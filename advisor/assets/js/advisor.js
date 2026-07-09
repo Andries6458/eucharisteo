@@ -2,9 +2,9 @@
    residency's tax engine into one structured, pure-data report that the UI
    renders and the Obsidian vault writer serialises. */
 
-import { RISK_PROFILES, CURRENCIES } from './config.js';
-import { convert, crossRate } from './fx.js';
-import { computeAllocation, rebalancePlan, walletTotals } from './allocation.js';
+import { RISK_PROFILES, CURRENCIES, RESIDENCIES } from './config.js';
+import { convert, crossRate, fmtMoney } from './fx.js';
+import { computeAllocation, rebalancePlan, walletTotals, holdingValue } from './allocation.js';
 import { rankMovers, volumeSpikes } from './movers.js';
 import { usCapitalGainsSummary } from './tax/us.js';
 import { zaCapitalGainsSummary } from './tax/za.js';
@@ -12,20 +12,19 @@ import { ukCapitalGainsSummary } from './tax/uk.js';
 
 const fin = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 
-const RESIDENCY_CURRENCY = { US: 'USD', ZA: 'ZAR', UK: 'GBP' };
+const RESIDENCY_CURRENCY = Object.fromEntries(RESIDENCIES.map((r) => [r.code, r.currency]));
 
-/* Unrealised gain across holdings, in the given currency. Cost basis uses
-   avgCost in the holding's own currency. */
+/* Unrealised gain across holdings, in the given currency. Value comes from
+   the shared holdingValue rule; cost basis uses avgCost in the holding's
+   own currency. */
 export function unrealisedGain(holdings = [], quotesBySymbol = new Map(), rates, toCurrency = 'USD') {
   let gain = 0;
   for (const h of holdings) {
     const units = fin(h.units);
     if (units === 0) continue;
-    const q = quotesBySymbol.get?.(h.symbol);
-    const price = q && fin(q.price) > 0 ? q.price : fin(h.avgCost);
-    const ccy = q?.currency || h.currency || 'USD';
-    const value = convert(units * price, ccy, toCurrency, rates);
-    const cost = convert(units * fin(h.avgCost), h.currency || ccy, toCurrency, rates);
+    const value = holdingValue(h, quotesBySymbol, rates, toCurrency);
+    const costCcy = CURRENCIES.includes(h.currency) ? h.currency : 'USD';
+    const cost = convert(units * fin(h.avgCost), costCcy, toCurrency, rates);
     gain += value - cost;
   }
   return gain;
@@ -58,28 +57,30 @@ export function recommendations(report) {
   const recs = [];
   const { rebalance, tax, movers } = report;
 
+  const money = (v) => fmtMoney(v, tax.currency, { compact: true });
+
   for (const row of rebalance.rows) {
     if (!row.needsAction) continue;
     const dir = row.move > 0 ? 'Add to' : 'Trim';
     recs.push({
       kind: 'rebalance',
-      text: `${dir} the ${row.bucket} bucket by about ${Math.abs(row.move).toFixed(0)} ${report.base} — it sits at ${(row.actual * 100).toFixed(1)}% against a ${(row.target * 100).toFixed(0)}% target.`,
+      text: `${dir} the ${row.bucket} bucket by about ${fmtMoney(Math.abs(row.move), report.base, { compact: true })} — it sits at ${(row.actual * 100).toFixed(1)}% against a ${(row.target * 100).toFixed(0)}% target.`,
     });
   }
 
   if (tax.residency === 'ZA') {
     const room = tax.detail.tfsa.room;
-    if (room > 0) recs.push({ kind: 'tax', text: `You still have R${room.toFixed(0)} of TFSA room this tax year — contributions grow entirely tax-free.` });
-    if (tax.detail.tfsa.excess > 0) recs.push({ kind: 'tax', text: `TFSA over-contribution of R${tax.detail.tfsa.excess.toFixed(0)} detected — SARS levies a 40% penalty (R${tax.detail.tfsa.penalty.toFixed(0)}). Stop contributions immediately.` });
-    if (tax.gain > 0) recs.push({ kind: 'tax', text: `Unrealised gains of R${tax.gain.toFixed(0)}: the first R40,000 realised per tax year is CGT-free — consider using the annual exclusion before February.` });
+    if (room > 0) recs.push({ kind: 'tax', text: `You still have ${money(room)} of TFSA room this tax year — contributions grow entirely tax-free.` });
+    if (tax.detail.tfsa.excess > 0) recs.push({ kind: 'tax', text: `TFSA over-contribution of ${money(tax.detail.tfsa.excess)} detected — SARS levies a 40% penalty (${money(tax.detail.tfsa.penalty)}). Stop contributions immediately.` });
+    if (tax.gain > 0) recs.push({ kind: 'tax', text: `Unrealised gains of ${money(tax.gain)}: the first R40,000 realised per tax year is CGT-free — consider using the annual exclusion before February.` });
   }
   if (tax.residency === 'UK') {
     const room = tax.detail.isa.room;
-    if (room > 0) recs.push({ kind: 'tax', text: `£${room.toFixed(0)} of ISA allowance remains this tax year — shelter income-producing assets first.` });
-    if (tax.gain > 0) recs.push({ kind: 'tax', text: `Unrealised gains of £${tax.gain.toFixed(0)}: the £3,000 annual exempt amount resets on 6 April — realising up to that is tax-free.` });
+    if (room > 0) recs.push({ kind: 'tax', text: `${money(room)} of ISA allowance remains this tax year — shelter income-producing assets first.` });
+    if (tax.gain > 0) recs.push({ kind: 'tax', text: `Unrealised gains of ${money(tax.gain)}: the £3,000 annual exempt amount resets on 6 April — realising up to that is tax-free.` });
   }
   if (tax.residency === 'US' && tax.gain > 0 && tax.detail.holdLongSaving > 0) {
-    recs.push({ kind: 'tax', text: `Holding positions past 12 months would cut the tax on current gains by about $${tax.detail.holdLongSaving.toFixed(0)} (long-term 0/15/20% vs ordinary rates).` });
+    recs.push({ kind: 'tax', text: `Holding positions past 12 months would cut the tax on current gains by about ${money(tax.detail.holdLongSaving)} (long-term 0/15/20% vs ordinary rates).` });
   }
 
   if (movers.spikes.length > 0) {
