@@ -154,7 +154,7 @@ tracker/
   index.html              app shell (login + dashboard)
   manifest.webmanifest    PWA manifest (installability)
   sw.js                   service worker (offline)
-  make-icons.mjs          regenerates the app icons (node make-icons.mjs)
+  assets/icons/*.png      = the new Eucharisteo logo (2026-11), built by eucharisteo-project/brand/make_brand.py
   assets/
     css/app.css
     js/config.js          ← paste your Firebase keys here
@@ -162,7 +162,7 @@ tracker/
     js/store.js           Firebase / local storage layer
     js/export.js          Excel + PDF + clipboard parsing
     js/app.js             UI controller
-    icons/                generated PNG icons
+    icons/                app icons (the new Eucharisteo logo, see above)
 ```
 
 ## Notes & limits
