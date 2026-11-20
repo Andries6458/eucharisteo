@@ -91,7 +91,7 @@ a{color:var(--gold);text-decoration:none}
   font-weight:700;margin-bottom:.4rem}
 
 /* ---------- summary cards ---------- */
-.summary-grid{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));margin-bottom:1.5rem}
+.summary-grid{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));margin-bottom:1.5rem}
 .pcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
   padding:1.1rem 1.2rem;box-shadow:var(--shadow)}
 .pcard h3{font-family:var(--font-serif);font-size:1.35rem;color:var(--text);font-weight:600;display:flex;align-items:center;gap:.5rem}
@@ -151,7 +151,9 @@ a{color:var(--gold);text-decoration:none}
 
 /* ---------- toolbar ---------- */
 .toolbar{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin-bottom:1rem}
-.tabs{display:inline-flex;background:var(--surface2);border:1px solid var(--border);border-radius:99px;padding:3px}
+/* narrow screens: tabs wrap to a second row (all filters stay visible, page never scrolls sideways);
+   20px = half the one-row height, so a single row is the same pill as before */
+.tabs{display:inline-flex;flex-wrap:wrap;max-width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:3px}
 .tab{border:none;background:transparent;color:var(--muted);padding:.45rem .9rem;border-radius:99px;font-weight:600;font-size:.85rem}
 .tab.active{background:linear-gradient(135deg,var(--gold),var(--gold-deep));color:var(--obsidian)}
 .search{flex:1;min-width:180px;display:flex;align-items:center;gap:.5rem;background:var(--surface2);
@@ -292,6 +294,7 @@ table.inv tr.totrow td{border-top:2px solid var(--border);cursor:default;color:v
   .topbar{gap:.6rem;padding:.6rem .8rem}
   .brand-logo{height:36px}
   .brand-app,.badge-more{display:none}
+  .tab{padding:.45rem .6rem}
   .userchip span.email{display:none}
   .wrap{padding:1rem .8rem 5rem}
 }
