@@ -1,11 +1,14 @@
 [
   {
-    "relation": ["delegate_permission/common.handle_all_urls"],
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
     "target": {
       "namespace": "android_app",
-      "package_name": "co.za.eucharisteotrading.invoices",
+      "package_name": "za.co.eucharisteotrading.tracker",
       "sha256_cert_fingerprints": [
-        "REPLACE_WITH_SHA256_FINGERPRINT_FROM_PWABUILDER_KEYSTORE"
+        "43:86:9B:E6:11:36:1D:EC:5F:48:F1:A4:35:D9:6B:78:5A:44:C0:7B:FB:CB:D3:D7:EE:2A:87:F8:6E:57:12:A8",
+        "15:2B:78:93:50:8E:E7:53:41:B3:1D:5C:85:A2:76:4E:5F:BD:8E:B6:25:DD:10:E0:5C:E0:9D:6C:2E:21:EB:A2"
       ]
     }
   }
