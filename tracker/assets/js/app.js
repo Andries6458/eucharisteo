@@ -53,8 +53,9 @@ let state = {
 
 function paintModeBadge(mode) {
   const b = $('#mode-badge');
-  if (mode === 'cloud') { b.textContent = 'Cloud · synced'; b.className = 'mode-badge mode-cloud'; }
-  else { b.textContent = 'Local device'; b.className = 'mode-badge mode-local'; }
+  // second word hides on phones so the pill stays on one line next to the logo
+  if (mode === 'cloud') { b.innerHTML = 'Cloud<span class="badge-more"> · synced</span>'; b.className = 'mode-badge mode-cloud'; }
+  else { b.innerHTML = 'Local<span class="badge-more"> device</span>'; b.className = 'mode-badge mode-local'; }
 }
 
 function setupLoginUI(mode) {

@@ -1,5 +1,5 @@
 /* Eucharisteo Invoice Tracker — service worker (offline + installability) */
-const CACHE = 'eucharisteo-tracker-v7';
+const CACHE = 'eucharisteo-tracker-v8';
 const ASSETS = [
   './',
   './index.html',
@@ -12,6 +12,7 @@ const ASSETS = [
   './assets/js/config.js',
   './assets/icons/icon-192.png',
   './assets/icons/icon-512.png',
+  './assets/img/eucharisteo-logo.png',
 ];
 
 self.addEventListener('install', (e) => {
